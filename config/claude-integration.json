@@ -1,0 +1,10 @@
+{
+  "tools": [
+    {
+      "name": "spawn_task",
+      "handler": "~/.ohclaude/bin/co tool spawn_task",
+      "description": "Spawn isolated Claude instance for a task"
+    }
+  ],
+  "version": "1.0.0"
+}

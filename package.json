@@ -1,0 +1,20 @@
+{
+  "name": "ohclaude",
+  "version": "1.0.0",
+  "description": "Global Claude task orchestration system",
+  "bin": {
+    "co": "./dist/bin/co.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "install-global": "npm run build && npm link"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

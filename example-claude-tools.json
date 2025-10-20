@@ -1,0 +1,46 @@
+{
+  "comment": "Copy this to your project's .claude/tools.json (NOT in worktrees)",
+  "tools": [
+    {
+      "name": "spawn_task",
+      "description": "Create an isolated git worktree and spawn a separate Claude CLI instance to work on a specific task in parallel. Use this to delegate independent sub-tasks.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Short identifier for the task (e.g., 'fix-auth-bug', 'add-tests')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description of what needs to be done"
+          },
+          "baseBranch": {
+            "type": "string",
+            "description": "Base branch to create worktree from (optional, defaults to 'develop')"
+          }
+        },
+        "required": ["name", "description"]
+      },
+      "command": "co tool spawn_task '$JSON'"
+    },
+    {
+      "name": "check_tasks",
+      "description": "Check all active tasks for completion and automatically merge completed ones back to the base branch",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "command": "co tool check_tasks '{}'"
+    },
+    {
+      "name": "list_tasks",
+      "description": "List all active and recently completed tasks for the current project",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "command": "co tool list_tasks '{}'"
+    }
+  ]
+}

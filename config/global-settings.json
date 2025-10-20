@@ -1,0 +1,13 @@
+{
+  "defaultBaseBranch": "develop",
+  "worktreesBaseDir": "~/claude-worktrees",
+  "autoMerge": true,
+  "runTests": true,
+  "testCommands": [
+    "npm test",
+    "npm run lint",
+    "npm run build"
+  ],
+  "terminalApp": "default",
+  "claudeCommand": "claude"
+}
