@@ -150,11 +150,13 @@ else
   echo ""
 fi
 
-source $RC_FILE
-
 echo ""
 echo "✅ Installation complete!"
 echo ""
+if [ -n "$RC_FILE" ]; then
+  echo "⚠️  Please reload your shell or run: source $RC_FILE"
+  echo ""
+fi
 echo "Usage:"
 echo "  co spawn <name> <description> - Spawn a new task"
 echo "  co check                      - Check completed tasks"

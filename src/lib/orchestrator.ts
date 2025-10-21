@@ -256,7 +256,10 @@ Before marking complete:
 ${this.settings.testCommands.map(cmd => `- Run: ${cmd}`).join('\n')}
 
 ## Completion
-When done, create .task_complete with a summary of changes.
+When done:
+1. Create .task_complete with a summary of changes
+2. Ask the user if they want to merge the task back to ${task.baseBranch}
+3. If yes, use the mcp__claude-o__merge_task tool to merge this task
 `
     };
     
