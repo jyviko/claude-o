@@ -440,32 +440,70 @@ When done:
   }
 
   manualMerge(taskNameOrId: string, projectPath?: string): void {
-    const project = projectPath ?
-      this.getProject(projectPath) :
-      this.detectProject();
+    let project: Project | undefined;
+
+    // Try to detect project if not provided
+    if (projectPath) {
+      project = this.getProject(projectPath);
+    } else {
+      try {
+        project = this.detectProject();
+      } catch (error) {
+        // Not in a git repo, will search all projects
+        project = undefined;
+      }
+    }
 
     // Find the task - allow both active and completed tasks
     // Support both task name and task ID (or partial ID)
-    const task = this.db.prepare(`
-      SELECT
-        id,
-        project_path as projectPath,
-        project_name as projectName,
-        task_name as taskName,
-        description,
-        worktree_path as worktreePath,
-        branch,
-        base_branch as baseBranch,
-        status,
-        created_at as createdAt,
-        completed_at as completedAt,
-        merged_at as mergedAt,
-        metadata
-      FROM tasks
-      WHERE (task_name = ? OR id LIKE ?)
-        AND project_path = ?
-        AND status IN ('active', 'completed')
-    `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    let task: GlobalTask | undefined;
+
+    if (project) {
+      // Search within specific project
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND project_path = ?
+          AND status IN ('active', 'completed')
+      `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    } else {
+      // Search across all projects
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND status IN ('active', 'completed')
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(taskNameOrId, `${taskNameOrId}%`) as GlobalTask | undefined;
+    }
 
     if (!task) {
       console.error(`❌ Task not found: ${taskNameOrId}`);
@@ -483,31 +521,69 @@ When done:
   }
 
   killTask(taskNameOrId: string, projectPath?: string): void {
-    const project = projectPath ?
-      this.getProject(projectPath) :
-      this.detectProject();
+    let project: Project | undefined;
+
+    // Try to detect project if not provided
+    if (projectPath) {
+      project = this.getProject(projectPath);
+    } else {
+      try {
+        project = this.detectProject();
+      } catch (error) {
+        // Not in a git repo, will search all projects
+        project = undefined;
+      }
+    }
 
     // Find the task - support both task name and task ID (or partial ID)
-    const task = this.db.prepare(`
-      SELECT
-        id,
-        project_path as projectPath,
-        project_name as projectName,
-        task_name as taskName,
-        description,
-        worktree_path as worktreePath,
-        branch,
-        base_branch as baseBranch,
-        status,
-        created_at as createdAt,
-        completed_at as completedAt,
-        merged_at as mergedAt,
-        metadata
-      FROM tasks
-      WHERE (task_name = ? OR id LIKE ?)
-        AND project_path = ?
-        AND status = 'active'
-    `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    let task: GlobalTask | undefined;
+
+    if (project) {
+      // Search within specific project
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND project_path = ?
+          AND status = 'active'
+      `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    } else {
+      // Search across all projects
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(taskNameOrId, `${taskNameOrId}%`) as GlobalTask | undefined;
+    }
 
     if (!task) {
       console.error(`❌ Task not found: ${taskNameOrId}`);
@@ -562,7 +638,7 @@ When done:
         UPDATE projects
         SET task_count = task_count - 1
         WHERE path = ?
-      `).run(project.path);
+      `).run(task.projectPath);
 
       console.log(`✅ Task killed: ${task.taskName}`);
 
