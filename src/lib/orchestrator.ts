@@ -13,7 +13,7 @@ export class GlobalClaudeOrchestrator {
   private settings!: GlobalSettings;
   
   constructor() {
-    this.configDir = path.join(os.homedir(), '.ohclaude');
+    this.configDir = path.join(os.homedir(), '.claude-o');
     this.dataDir = path.join(this.configDir, 'data');
     
     this.ensureSetup();

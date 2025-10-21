@@ -14,15 +14,15 @@ A global task orchestration system for Claude Code that uses git worktrees to ru
 
 ```bash
 # Clone the repository
-git clone <repo-url> /tmp/ohclaude
-cd /tmp/ohclaude
+git clone <repo-url> /tmp/claude-o
+cd /tmp/claude-o
 
-# Run the installer (copies everything to ~/.ohclaude)
+# Run the installer (copies everything to ~/.claude-o)
 ./install.sh
 ```
 
 This will:
-1. Copy all files to `~/.ohclaude`
+1. Copy all files to `~/.claude-o`
 2. Install dependencies with `yarn`
 3. Build the TypeScript code
 4. Add the `co` command alias to your shell
@@ -33,7 +33,7 @@ After installation, restart your shell or run:
 source ~/.zshrc  # or source ~/.bashrc
 
 # Clean up the temporary clone
-rm -rf /tmp/ohclaude
+rm -rf /tmp/claude-o
 ```
 
 ## Usage
@@ -103,12 +103,12 @@ Kill the test-feature task
 
 ### Settings
 
-Edit `~/.ohclaude/config/global-settings.json`:
+Edit `~/.claude-o/config/global-settings.json`:
 
 ```json
 {
   "defaultBaseBranch": "develop",
-  "worktreesBaseDir": "~/.ohclaude/worktrees",
+  "worktreesBaseDir": "~/.claude-o/worktrees",
   "autoMerge": true,
   "runTests": true,
   "testCommands": ["npm test", "npm run lint", "npm run build"],
@@ -122,7 +122,7 @@ Edit `~/.ohclaude/config/global-settings.json`:
 The MCP server is automatically configured using the Claude CLI command:
 
 ```bash
-claude mcp add --scope user --transport stdio claude-orchestrator -- node ~/.ohclaude/dist/src/mcp/server.js
+claude mcp add --scope user --transport stdio claude-o -- node ~/.claude-o/dist/src/mcp/server.js
 ```
 
 This adds the server at **user scope**, making it available across all your projects.
@@ -140,20 +140,20 @@ If you prefer to configure manually, add to your project's `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "claude-orchestrator": {
+    "claude-o": {
       "command": "node",
-      "args": ["~/.ohclaude/dist/src/mcp/server.js"]
+      "args": ["~/.claude-o/dist/src/mcp/server.js"]
     }
   }
 }
 ```
 
-All files are installed to `~/.ohclaude` regardless of where you cloned the repository.
+All files are installed to `~/.claude-o` regardless of where you cloned the repository.
 
 ## How It Works
 
 1. **Task Spawning**: When you spawn a task, the orchestrator:
-   - Creates a new git worktree in `~/.ohclaude/worktrees/<project>/<task-timestamp>/`
+   - Creates a new git worktree in `~/.claude-o/worktrees/<project>/<task-timestamp>/`
    - Creates a new branch `fix/<task-name-timestamp>`
    - Generates a `TASK.md` file with task details
    - Opens a new terminal with Claude Code running in that worktree
@@ -172,7 +172,7 @@ All files are installed to `~/.ohclaude` regardless of where you cloned the repo
 ## Project Structure
 
 ```
-~/.ohclaude/
+~/.claude-o/
 ├── config/
 │   └── global-settings.json
 ├── data/
@@ -237,19 +237,19 @@ You now have two Claude instances working in parallel on these tasks.
 claude mcp list
 ```
 
-2. Check if claude-orchestrator is listed:
+2. Check if claude-o is listed:
 ```bash
-claude mcp list | grep claude-orchestrator
+claude mcp list | grep claude-o
 ```
 
 3. Re-add the server if missing:
 ```bash
-claude mcp add --scope user --transport stdio claude-orchestrator -- node ~/.ohclaude/dist/src/mcp/server.js
+claude mcp add --scope user --transport stdio claude-o -- node ~/.claude-o/dist/src/mcp/server.js
 ```
 
 4. Test the MCP server manually:
 ```bash
-node ~/.ohclaude/dist/src/mcp/server.js
+node ~/.claude-o/dist/src/mcp/server.js
 ```
 
 5. Check Claude Code logs:
@@ -261,7 +261,7 @@ tail -f ~/.claude/debug/*.log
 
 1. Check the database:
 ```bash
-sqlite3 ~/.ohclaude/data/orchestrator.db "SELECT * FROM tasks;"
+sqlite3 ~/.claude-o/data/orchestrator.db "SELECT * FROM tasks;"
 ```
 
 2. Verify you're in a git repository:
@@ -273,7 +273,7 @@ git rev-parse --show-toplevel
 
 Remove everything and start fresh:
 ```bash
-rm -rf ~/.ohclaude
+rm -rf ~/.claude-o
 ./install.sh
 ```
 

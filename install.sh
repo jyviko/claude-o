@@ -1,47 +1,36 @@
 #!/bin/bash
-# install.sh
 
-echo "🚀 Installing Claude Orchestrator..."
+echo "🚀 Installing Claude Orchestrato (Claude-O)..."
 
-# Source directory (where this script is)
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Install directory (fixed location)
-INSTALL_DIR="$HOME/.ohclaude"
+INSTALL_DIR="$HOME/.claude-o"
 
 echo "📁 Installing to $INSTALL_DIR"
 
 cd "$SOURCE_DIR"
 
-# Install dependencies and build
 echo "📦 Installing dependencies..."
 yarn install
 
 echo "🔨 Building..."
 yarn build
 
-# Create install directory if it doesn't exist
 mkdir -p "$INSTALL_DIR"
 
-# Copy only the compiled dist folder and package.json
 echo "📋 Copying compiled files..."
 rm -rf "$INSTALL_DIR/dist"
 cp -r "$SOURCE_DIR/dist" "$INSTALL_DIR/"
 cp "$SOURCE_DIR/package.json" "$INSTALL_DIR/"
 
-# Install production dependencies in the install directory
 echo "📦 Installing production dependencies in $INSTALL_DIR..."
 cd "$INSTALL_DIR"
 yarn install --production
 
-# Make executables
 chmod +x "$INSTALL_DIR/dist/bin/co.js"
 chmod +x "$INSTALL_DIR/dist/src/mcp/server.js"
 
-# Detect shell and add alias
 echo "🔧 Setting up shell alias..."
 
-# Detect current shell
 CURRENT_SHELL=$(basename "$SHELL")
 
 # Determine the appropriate RC file
@@ -88,19 +77,19 @@ echo "🔧 Configuring MCP Server for Claude Code..."
 # Use claude CLI to add the MCP server at user scope
 echo "Adding MCP server using claude CLI..."
 if command -v claude &> /dev/null; then
-  claude mcp add --scope user --transport stdio claude-orchestrator -- node "$INSTALL_DIR/dist/src/mcp/server.js"
+  claude mcp add --scope user --transport stdio claude-o -- node "$INSTALL_DIR/dist/src/mcp/server.js"
   echo "✅ MCP Server configured using claude CLI"
 else
   echo "⚠️  'claude' command not found"
   echo "📝 Add the MCP server manually by running:"
   echo ""
-  echo "  claude mcp add --scope user --transport stdio claude-orchestrator -- node $INSTALL_DIR/dist/src/mcp/server.js"
+  echo "  claude mcp add --scope user --transport stdio claude-o -- node $INSTALL_DIR/dist/src/mcp/server.js"
   echo ""
   echo "Or add it to your project's .mcp.json:"
   echo ""
   echo '{
   "mcpServers": {
-    "claude-orchestrator": {
+    "claude-o": {
       "command": "node",
       "args": ["'$INSTALL_DIR'/dist/src/mcp/server.js"]
     }

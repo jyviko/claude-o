@@ -12,7 +12,7 @@ const orchestrator = new GlobalClaudeOrchestrator();
 // Create the server
 const server = new Server(
   {
-    name: 'claude-orchestrator',
+    name: 'claude-o',
     version: '1.0.0',
   },
   {

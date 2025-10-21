@@ -1,5 +1,5 @@
 {
-  "name": "ohclaude",
+  "name": "claude-o",
   "version": "1.0.0",
   "description": "Global Claude task orchestration system",
   "bin": {
