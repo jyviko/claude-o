@@ -1,9 +1,0 @@
-{
-  "tools": [
-    {
-      "name": "spawn_task",
-      "description": "Create an isolated git worktree and spawn another Claude instance for a specific task",
-      "handler": "ohclaude tool-handler spawn_task"
-    }
-  ]
-}

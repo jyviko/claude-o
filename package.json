@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "description": "Global Claude task orchestration system",
   "bin": {
-    "co": "./dist/bin/co.js"
+    "co": "./dist/bin/co.js",
+    "co-mcp": "./dist/src/mcp/server.js"
   },
   "scripts": {
     "build": "tsc",
     "install-global": "npm run build && npm link"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.1",
     "better-sqlite3": "^9.0.0"
   },
   "devDependencies": {

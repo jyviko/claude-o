@@ -1,21 +1,42 @@
 #!/bin/bash
-# ~/.ohclaude/install.sh
+# install.sh
 
 echo "🚀 Installing Claude Orchestrator..."
 
-INSTALL_DIR="$HOME/Sources/ohclaude"
-cd "$INSTALL_DIR"
+# Source directory (where this script is)
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Install dependencies
+# Install directory (fixed location)
+INSTALL_DIR="$HOME/.ohclaude"
+
+echo "📁 Installing to $INSTALL_DIR"
+
+cd "$SOURCE_DIR"
+
+# Install dependencies and build
 echo "📦 Installing dependencies..."
 yarn install
 
-# Build TypeScript
 echo "🔨 Building..."
 yarn build
 
-# Make executable
-chmod +x dist/bin/co.js
+# Create install directory if it doesn't exist
+mkdir -p "$INSTALL_DIR"
+
+# Copy only the compiled dist folder and package.json
+echo "📋 Copying compiled files..."
+rm -rf "$INSTALL_DIR/dist"
+cp -r "$SOURCE_DIR/dist" "$INSTALL_DIR/"
+cp "$SOURCE_DIR/package.json" "$INSTALL_DIR/"
+
+# Install production dependencies in the install directory
+echo "📦 Installing production dependencies in $INSTALL_DIR..."
+cd "$INSTALL_DIR"
+yarn install --production
+
+# Make executables
+chmod +x "$INSTALL_DIR/dist/bin/co.js"
+chmod +x "$INSTALL_DIR/dist/src/mcp/server.js"
 
 # Detect shell and add alias
 echo "🔧 Setting up shell alias..."
@@ -61,17 +82,32 @@ if [ -n "$RC_FILE" ]; then
   fi
 fi
 
-# Install Claude tools config
-echo "🔧 Installing Claude CLI tools..."
-mkdir -p ~/.claude
+# Configure MCP Server for Claude Code
+echo "🔧 Configuring MCP Server for Claude Code..."
 
-if [ -f ~/.claude/tools.json ]; then
-  echo "⚠️  ~/.claude/tools.json already exists, backing up to ~/.claude/tools.json.backup"
-  cp ~/.claude/tools.json ~/.claude/tools.json.backup
+# Use claude CLI to add the MCP server at user scope
+echo "Adding MCP server using claude CLI..."
+if command -v claude &> /dev/null; then
+  claude mcp add --scope user --transport stdio claude-orchestrator -- node "$INSTALL_DIR/dist/src/mcp/server.js"
+  echo "✅ MCP Server configured using claude CLI"
+else
+  echo "⚠️  'claude' command not found"
+  echo "📝 Add the MCP server manually by running:"
+  echo ""
+  echo "  claude mcp add --scope user --transport stdio claude-orchestrator -- node $INSTALL_DIR/dist/src/mcp/server.js"
+  echo ""
+  echo "Or add it to your project's .mcp.json:"
+  echo ""
+  echo '{
+  "mcpServers": {
+    "claude-orchestrator": {
+      "command": "node",
+      "args": ["'$INSTALL_DIR'/dist/src/mcp/server.js"]
+    }
+  }
+}'
+  echo ""
 fi
-
-cp ~/.ohclaude/example-claude-tools.json ~/.claude/tools.json
-echo "✅ Claude tools config installed to ~/.claude/tools.json"
 
 echo ""
 echo "✅ Installation complete!"

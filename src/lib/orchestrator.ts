@@ -583,7 +583,6 @@ When done, create .task_complete with a summary of changes.
           console.log(`   • ${p.name} (${p.path})`);
         });
         console.log('\nUsage: co nuke --confirm <project-path>');
-        console.log('Example: co nuke --confirm /Users/kourtis/Sources/darkmortgage-backend');
         return;
       }
     }
