@@ -41,11 +41,11 @@ export class GlobalClaudeOrchestrator {
     const settingsPath = path.join(this.configDir, 'config', 'global-settings.json');
     if (!fs.existsSync(settingsPath)) {
       const defaultSettings: GlobalSettings = {
-        defaultBaseBranch: 'develop',
+        defaultBaseBranch: 'master',
         worktreesBaseDir: path.join(this.configDir, 'worktrees'),
         autoMerge: true,
         runTests: true,
-        testCommands: ['npm test', 'npm run lint', 'npm run build'],
+        testCommands: ['yarn test', 'yarn build'],
         terminalApp: 'default',
         claudeCommand: 'claude'
       };
@@ -107,14 +107,21 @@ export class GlobalClaudeOrchestrator {
 
       const projectName = path.basename(gitRoot);
 
+      // Detect current branch
+      const currentBranch = execSync('git branch --show-current', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        cwd: gitRoot
+      }).trim();
+
       // Register or update project
-      this.registerProject(gitRoot, projectName);
+      this.registerProject(gitRoot, projectName, currentBranch);
 
       return {
         path: gitRoot,
         name: projectName,
         lastUsed: new Date().toISOString(),
-        defaultBranch: this.settings.defaultBaseBranch,
+        defaultBranch: currentBranch || this.settings.defaultBaseBranch,
         taskCount: 0
       };
     } catch (error) {
@@ -122,20 +129,22 @@ export class GlobalClaudeOrchestrator {
     }
   }
   
-  private registerProject(projectPath: string, projectName: string) {
+  private registerProject(projectPath: string, projectName: string, defaultBranch?: string) {
     const existing = this.db.prepare(
       'SELECT * FROM projects WHERE path = ?'
     ).get(projectPath);
-    
+
+    const branch = defaultBranch || this.settings.defaultBaseBranch;
+
     if (!existing) {
       this.db.prepare(`
         INSERT INTO projects (path, name, last_used, default_branch)
         VALUES (?, ?, ?, ?)
-      `).run(projectPath, projectName, new Date().toISOString(), this.settings.defaultBaseBranch);
+      `).run(projectPath, projectName, new Date().toISOString(), branch);
     } else {
       this.db.prepare(`
-        UPDATE projects SET last_used = ? WHERE path = ?
-      `).run(new Date().toISOString(), projectPath);
+        UPDATE projects SET last_used = ?, default_branch = ? WHERE path = ?
+      `).run(new Date().toISOString(), branch, projectPath);
     }
   }
   
@@ -156,7 +165,7 @@ export class GlobalClaudeOrchestrator {
       `${taskName}-${timestamp}`
     );
     const branchName = `fix/${taskName}-${timestamp}`;
-    const baseBranch = options.baseBranch || this.settings.defaultBaseBranch;
+    const baseBranch = options.baseBranch || project.defaultBranch;
     
     console.log(`\n🚀 Spawning task: ${taskName}`);
     console.log(`📁 Project: ${project.name}`);
@@ -277,13 +286,14 @@ When done:
   
   private launchClaude(task: GlobalTask) {
     const prompt = `Read TASK.md for your focused task: ${task.taskName}`;
+    const windowTitle = `Claude-O: ${task.taskName}`;
 
     if (process.platform === 'darwin') {
       // macOS - use proper escaping via JSON.stringify for bash command
-      const bashCommand = `cd ${JSON.stringify(task.worktreePath)} && ${this.settings.claudeCommand} ${JSON.stringify(prompt)}`;
+      const bashCommand = `cd ${JSON.stringify(task.worktreePath)} && echo -e "\\033]0;${windowTitle}\\007" && ${this.settings.claudeCommand} ${JSON.stringify(prompt)}`;
 
       const appleScriptCommand = this.settings.terminalApp === 'iterm' ?
-        `tell application "iTerm" to tell current window to tell current session to write text ${JSON.stringify(bashCommand)}` :
+        `tell application "iTerm" to tell (create window with default profile) to tell current session to write text ${JSON.stringify(bashCommand)}` :
         `tell application "Terminal" to do script ${JSON.stringify(bashCommand)}`;
 
       console.log(`🚀 Launching Claude in ${this.settings.terminalApp === 'iterm' ? 'iTerm' : 'Terminal'}...`);
