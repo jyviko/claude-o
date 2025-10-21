@@ -26,7 +26,8 @@ This will:
 2. Install dependencies with `yarn`
 3. Build the TypeScript code
 4. Add the `co` command alias to your shell
-5. Configure the MCP server for Claude Code
+5. Detect and configure your preferred terminal (macOS: Terminal or iTerm)
+6. Configure the MCP server for Claude Code
 
 After installation, restart your shell or run:
 ```bash
@@ -116,6 +117,16 @@ Edit `~/.claude-o/config/global-settings.json`:
   "claudeCommand": "claude"
 }
 ```
+
+#### Terminal App Options
+
+The `terminalApp` setting controls which terminal application opens when spawning tasks:
+
+- **macOS**: `"default"` (Terminal.app) or `"iterm"` (iTerm)
+- **Linux**: `"default"` (gnome-terminal), `"alacritty"`, or `"wezterm"`
+- **Windows**: Uses `cmd` by default
+
+The installer will automatically detect and configure your preferred terminal on macOS.
 
 ### MCP Server
 

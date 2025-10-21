@@ -71,7 +71,59 @@ if [ -n "$RC_FILE" ]; then
   fi
 fi
 
-# Configure MCP Server for Claude Code
+# Terminal preference for macOS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo ""
+  echo "🖥️  Terminal Preference Detection"
+
+  # Check if iTerm is installed
+  ITERM_INSTALLED=false
+  if [ -d "/Applications/iTerm.app" ]; then
+    ITERM_INSTALLED=true
+  fi
+
+  # Check if Terminal.app is available (it always is on macOS)
+  TERMINAL_INSTALLED=true
+
+  if [ "$ITERM_INSTALLED" = true ]; then
+    echo ""
+    echo "Detected terminal applications:"
+    echo "  1) Terminal (macOS default)"
+    echo "  2) iTerm"
+    echo ""
+    read -p "Which terminal would you like to use? (1/2, default: 1): " TERMINAL_CHOICE
+
+    case "$TERMINAL_CHOICE" in
+      2)
+        TERMINAL_PREF="iterm"
+        echo "✅ Will use iTerm for spawning tasks"
+        ;;
+      *)
+        TERMINAL_PREF="default"
+        echo "✅ Will use Terminal.app for spawning tasks"
+        ;;
+    esac
+  else
+    TERMINAL_PREF="default"
+    echo "✅ Will use Terminal.app for spawning tasks"
+  fi
+
+  # Update the settings file if it exists
+  SETTINGS_FILE="$INSTALL_DIR/config/global-settings.json"
+  if [ -f "$SETTINGS_FILE" ]; then
+    # Use a temp file for JSON manipulation
+    TMP_FILE=$(mktemp)
+    if command -v jq &> /dev/null; then
+      jq --arg term "$TERMINAL_PREF" '.terminalApp = $term' "$SETTINGS_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$SETTINGS_FILE"
+      echo "✅ Updated terminal preference in settings"
+    else
+      # Fallback: sed replacement (less robust but doesn't require jq)
+      sed "s/\"terminalApp\": \"[^\"]*\"/\"terminalApp\": \"$TERMINAL_PREF\"/" "$SETTINGS_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$SETTINGS_FILE"
+      echo "✅ Updated terminal preference in settings"
+    fi
+  fi
+fi
+
 echo "🔧 Configuring MCP Server for Claude Code..."
 
 # Use claude CLI to add the MCP server at user scope
@@ -97,6 +149,8 @@ else
 }'
   echo ""
 fi
+
+source $RC_FILE
 
 echo ""
 echo "✅ Installation complete!"
