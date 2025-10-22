@@ -68,13 +68,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'merge_task',
-        description: 'Manually merge a specific task back to its base branch',
+        description: 'Manually merge a specific task back to its base branch. Use list_tasks to get task IDs. Just merges - does not run tests or builds.',
         inputSchema: {
           type: 'object',
           properties: {
             taskNameOrId: {
               type: 'string',
-              description: 'Task name or ID (or partial ID) to merge',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
             },
           },
           required: ['taskNameOrId'],
@@ -82,13 +82,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'kill_task',
-        description: 'Kill and remove a specific task, deleting its worktree and branch',
+        description: 'Kill and remove a specific task, deleting its worktree and branch. Use list_tasks to get task IDs.',
         inputSchema: {
           type: 'object',
           properties: {
             taskNameOrId: {
               type: 'string',
-              description: 'Task name or ID (or partial ID) to kill',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
             },
           },
           required: ['taskNameOrId'],

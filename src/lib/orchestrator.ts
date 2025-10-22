@@ -100,10 +100,31 @@ export class GlobalClaudeOrchestrator {
   
   detectProject(): Project {
     try {
-      const gitRoot = execSync('git rev-parse --show-toplevel', {
+      let gitRoot = execSync('git rev-parse --show-toplevel', {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'ignore']
       }).trim();
+
+      // Check if we're in a worktree - if so, find the main working tree
+      try {
+        const commonDir = execSync('git rev-parse --git-common-dir', {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'ignore'],
+          cwd: gitRoot
+        }).trim();
+
+        // If commonDir is not just ".git", we're in a worktree
+        if (commonDir !== '.git' && !path.isAbsolute(commonDir)) {
+          // commonDir is relative, resolve it and go up to find main repo
+          const absoluteCommonDir = path.resolve(gitRoot, commonDir);
+          gitRoot = path.dirname(absoluteCommonDir);
+        } else if (path.isAbsolute(commonDir) && commonDir.endsWith('.git')) {
+          // Absolute path to .git directory
+          gitRoot = path.dirname(commonDir);
+        }
+      } catch (error) {
+        // Not a worktree or error getting commonDir, use gitRoot as-is
+      }
 
       const projectName = path.basename(gitRoot);
 
@@ -260,24 +281,81 @@ ${task.description}
 3. Stay in this worktree directory
 4. Create .task_complete when done
 
-## Testing
-Before marking complete:
-${this.settings.testCommands.map(cmd => `- Run: ${cmd}`).join('\n')}
+## Testing & Validation
+Before marking complete, run sanity checks appropriate for this codebase:
 
-## Completion
+**Auto-detect the project type and run appropriate commands:**
+- JavaScript/TypeScript: Check for package.json, run npm test/yarn test/pnpm test, then build
+- Go: Check for go.mod, run go test ./... && go build ./...
+- Rust: Check for Cargo.toml, run cargo test && cargo clippy && cargo build
+- Python: Check for setup.py/pyproject.toml, run pytest or python -m unittest
+- C/C++: Check for Makefile/CMakeLists.txt, run make test or ctest
+- Other: Look for common test scripts or ask user
+
+**You MUST verify the code works before completing!**
+The merge tool does NOT run tests - you are responsible for quality.
+
+## Completion Checklist
 When done:
-1. Create .task_complete with a summary of changes
-2. Ask the user if they want to merge the task back to ${task.baseBranch}
-3. If yes, use the mcp__claude-o__merge_task tool to merge this task
+1. **DETECT PROJECT TYPE** - Look for package.json, Cargo.toml, go.mod, etc.
+2. **RUN APPROPRIATE TESTS/BUILDS** - Based on what you found:
+   - Node.js: npm/yarn/pnpm test && build
+   - Go: go test ./... && go build
+   - Rust: cargo test && cargo build
+   - Python: pytest or unittest
+   - C/C++: make test && make
+   - If unsure, ask the user what to run
+3. **COMMIT ALL YOUR WORK** - Run git add -A && git commit with descriptive message
+4. Create .claude-o folder: mkdir -p .claude-o
+5. Create .claude-o/<timestamp>_${task.taskName}-${task.id.substring(0, 8)}.task_complete with summary
+6. Commit the completion file: git add .claude-o && git commit -m "docs: task complete"
+7. Ask user if they want to merge the task back to ${task.baseBranch}
+8. If yes, use mcp__claude-o__merge_task tool (only merges - no tests)
+
+IMPORTANT:
+- **YOU MUST DETECT and run the right tests!** Don't use hardcoded commands.
+- Run tests BEFORE asking to merge! The merge tool will NOT run them.
+- Never ask to merge without committing all changes first!
+- Be smart about the codebase - inspect files to determine what to run.
+
+Note: Task completion files use migration-style naming (timestamp first).
+Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(0, 8)}.task_complete
 `
     };
-    
-    // Write context files
+
+    // Create .claude-o directory in worktree and ensure .gitignore
+    const claudeODir = path.join(task.worktreePath, '.claude-o');
+    if (!fs.existsSync(claudeODir)) {
+      fs.mkdirSync(claudeODir, { recursive: true });
+
+      // Create .gitignore to exclude task files but keep the folder
+      const gitignorePath = path.join(claudeODir, '.gitignore');
+      if (!fs.existsSync(gitignorePath)) {
+        fs.writeFileSync(gitignorePath, '# Ignore all task-related files\n*.task_complete\n*.context.json\n*.task.md\n\n# Keep the directory\n!.gitignore\n');
+      }
+    }
+
+    // Use timestamp for unique filenames (migration-style: timestamp first)
+    const timestamp = task.createdAt.replace(/[:.]/g, '-').replace('Z', '');
+    const shortId = task.id.substring(0, 8);
+
+    // Write context files with unique names in .claude-o folder
+    // Format: <timestamp>_<task-name>-<short-id>
+    const filePrefix = `${timestamp}_${task.taskName}-${shortId}`;
+
     fs.writeFileSync(
-      path.join(task.worktreePath, '.claude_context.json'),
+      path.join(claudeODir, `${filePrefix}.context.json`),
       JSON.stringify(contextData, null, 2)
     );
-    
+
+    // Write TASK.md to both locations:
+    // 1. In .claude-o for permanent history
+    fs.writeFileSync(
+      path.join(claudeODir, `${filePrefix}.task.md`),
+      contextData.instructions
+    );
+
+    // 2. In worktree root for easy access by Claude
     fs.writeFileSync(
       path.join(task.worktreePath, 'TASK.md'),
       contextData.instructions
@@ -353,9 +431,23 @@ When done:
     console.log(`\n🔍 Checking ${activeTasks.length} active tasks for ${project.name}...\n`);
     
     activeTasks.forEach(task => {
-      const completeFlagPath = path.join(task.worktreePath, '.task_complete');
-      
-      if (fs.existsSync(completeFlagPath)) {
+      // Check for completion file in .claude-o folder
+      const claudeODir = path.join(task.worktreePath, '.claude-o');
+      let isComplete = false;
+
+      // Check if .claude-o directory exists and has any .task_complete files
+      if (fs.existsSync(claudeODir)) {
+        const files = fs.readdirSync(claudeODir);
+        isComplete = files.some(file => file.endsWith('.task_complete'));
+      }
+
+      // Also check legacy location for backwards compatibility
+      if (!isComplete) {
+        const legacyCompletePath = path.join(task.worktreePath, '.task_complete');
+        isComplete = fs.existsSync(legacyCompletePath);
+      }
+
+      if (isComplete) {
         console.log(`✅ Task ready: ${task.taskName}`);
         completed++;
 
@@ -364,7 +456,7 @@ When done:
             merged++;
           }
         } else {
-          console.log(`   ⚠️  autoMerge is disabled. Run 'co merge ${task.taskName}' to merge manually.`);
+          console.log(`   ⚠️  autoMerge is disabled. Run 'co merge ${task.id.substring(0, 8)}' to merge manually.`);
         }
       }
     });
@@ -374,77 +466,108 @@ When done:
   
   private mergeTask(task: GlobalTask): boolean {
     const originalCwd = process.cwd();
-    
+
     try {
-      // Run tests if configured
-      if (this.settings.runTests && fs.existsSync(path.join(task.worktreePath, 'package.json'))) {
-        console.log('🧪 Running tests...');
-        process.chdir(task.worktreePath);
-        
-        for (const cmd of this.settings.testCommands) {
-          try {
-            execSync(cmd, { stdio: 'inherit' });
-            console.log(`  ✅ ${cmd}`);
-          } catch (error) {
-            console.log(`  ⚠️ ${cmd} failed or not found`);
-          }
+      // Work in project path, not worktree (which might get deleted)
+      process.chdir(task.projectPath);
+
+      // Check if worktree still exists
+      if (!fs.existsSync(task.worktreePath)) {
+        console.error(`\n❌ Worktree not found: ${task.worktreePath}`);
+        console.log('   The worktree may have been deleted. Cannot merge.');
+        process.chdir(originalCwd);
+        return false;
+      }
+
+      // Ensure all changes are committed in the worktree
+      const gitStatus = execSync(`git -C "${task.worktreePath}" status --porcelain`, { encoding: 'utf-8' }).trim();
+      if (gitStatus) {
+        console.log('\n📝 Uncommitted changes detected. Committing all changes...');
+        try {
+          execSync(`git -C "${task.worktreePath}" add -A`, { stdio: 'inherit' });
+          execSync(`git -C "${task.worktreePath}" commit -m "fix: ${task.taskName}\n\nCompleted by Claude orchestrator"`, { stdio: 'inherit' });
+          console.log('✅ Changes committed');
+        } catch (error) {
+          console.error('❌ Failed to commit changes. Please commit manually.');
+          process.chdir(originalCwd);
+          return false;
         }
       }
-      
-      // Commit any uncommitted changes
-      process.chdir(task.worktreePath);
-      try {
-        execSync('git add -A');
-        execSync(`git commit -m "fix: ${task.taskName}\n\nCompleted by Claude orchestrator"`);
-      } catch {
-        // No changes to commit
-      }
-      
-      // Merge back to base branch
-      process.chdir(task.projectPath);
-      const currentBranch = execSync('git branch --show-current', { 
-        encoding: 'utf-8' 
+
+      // Merge back to base branch (simple - no tests, no builds)
+      const currentBranch = execSync('git branch --show-current', {
+        encoding: 'utf-8'
       }).trim();
-      
-      execSync(`git checkout ${task.baseBranch}`);
-      execSync(`git merge --no-ff ${task.branch} -m "Merge: ${task.taskName} (automated)"`);
-      
+
+      console.log(`\n🔀 Merging ${task.branch} into ${task.baseBranch}...`);
+
+      execSync(`git checkout ${task.baseBranch}`, { stdio: 'inherit' });
+      execSync(`git merge --no-ff ${task.branch} -m "Merge: ${task.taskName} (automated)"`, { stdio: 'inherit' });
+
       console.log(`✅ Merged ${task.taskName} into ${task.baseBranch}`);
-      
+
       // Clean up worktree
-      execSync(`git worktree remove "${task.worktreePath}"`);
-      
+      console.log('\n🗑️  Cleaning up worktree...');
+      execSync(`git worktree remove "${task.worktreePath}"`, { stdio: 'inherit' });
+
       // Update database
       this.db.prepare(`
-        UPDATE tasks 
-        SET status = 'merged', completed_at = ?, merged_at = ? 
+        UPDATE tasks
+        SET status = 'merged', completed_at = ?, merged_at = ?
         WHERE id = ?
       `).run(new Date().toISOString(), new Date().toISOString(), task.id);
-      
+
       // Return to original branch
-      if (currentBranch) {
-        execSync(`git checkout ${currentBranch}`);
+      if (currentBranch && currentBranch !== task.baseBranch) {
+        execSync(`git checkout ${currentBranch}`, { stdio: 'inherit' });
       }
-      
+
       process.chdir(originalCwd);
       this.logTask('merge', task);
       return true;
-      
+
     } catch (error: any) {
-      console.error(`❌ Merge failed: ${error.message}`);
-      console.log(`   Task remains active. Fix issues and run 'co check' again.`);
-      process.chdir(originalCwd);
+      console.error(`\n❌ Merge failed!`);
+      console.error(`\nError: ${error.message}`);
+
+      // Try to extract more detailed error information
+      if (error.stderr) {
+        const stderr = error.stderr.toString();
+        console.error(`\nDetails:\n${stderr}`);
+
+        // Provide helpful hints based on error type
+        if (stderr.includes('CONFLICT')) {
+          console.log('\n💡 Merge conflict detected. To resolve:');
+          console.log(`   1. cd ${task.projectPath}`);
+          console.log(`   2. Resolve conflicts in the files`);
+          console.log(`   3. git add <resolved-files>`);
+          console.log(`   4. git commit`);
+          console.log(`   5. Try merging again with: co merge ${task.id.substring(0, 8)}`);
+        } else if (stderr.includes('not something we can merge')) {
+          console.log('\n💡 Branch not found. The worktree branch may have been deleted.');
+        } else if (stderr.includes('Please commit your changes')) {
+          console.log('\n💡 Uncommitted changes in main repo. Commit or stash them first.');
+        }
+      }
+
+      console.log(`\n⚠️  Task remains active. Fix the issues above and try again.`);
+
+      try {
+        process.chdir(originalCwd);
+      } catch (e) {
+        // Ignore chdir errors in cleanup
+      }
 
       return false;
     }
   }
 
-  manualMerge(taskNameOrId: string, projectPath?: string): void {
+  manualMerge(taskNameOrId: string, options: { projectPath?: string } = {}): void {
     let project: Project | undefined;
 
     // Try to detect project if not provided
-    if (projectPath) {
-      project = this.getProject(projectPath);
+    if (options.projectPath) {
+      project = this.getProject(options.projectPath);
     } else {
       try {
         project = this.detectProject();
@@ -516,7 +639,7 @@ When done:
     if (this.mergeTask(task)) {
       console.log(`\n✅ Successfully merged ${task.taskName}`);
     } else {
-      console.log(`\n❌ Merge failed. Please resolve conflicts manually.`);
+      console.log(`\n❌ Merge failed. Please resolve conflicts.`);
     }
   }
 
@@ -790,7 +913,13 @@ When done:
   
   listAllTasks(): void {
     const projects = this.db.prepare(`
-      SELECT * FROM projects 
+      SELECT
+        path,
+        name,
+        last_used as lastUsed,
+        default_branch as defaultBranch,
+        task_count as taskCount
+      FROM projects
       ORDER BY last_used DESC
     `).all() as Project[];
     

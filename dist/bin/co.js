@@ -49,15 +49,17 @@ function handleSpawn(args) {
 function handleKill(args) {
     const [taskName] = args;
     if (!taskName) {
-        console.error('Usage: co kill <task-name>');
+        console.error('Usage: co kill <task-id|task-name>');
+        console.error('Example: co kill 4681ae30  (preferred: use task ID from co list)');
         process.exit(1);
     }
     orchestrator.killTask(taskName);
 }
 function handleMerge(args) {
-    const [taskName] = args;
+    const taskName = args[0];
     if (!taskName) {
-        console.error('Usage: co merge <task-name>');
+        console.error('Usage: co merge <task-id|task-name>');
+        console.error('Example: co merge 4681ae30  (preferred: use task ID from co list)');
         process.exit(1);
     }
     orchestrator.manualMerge(taskName);
@@ -95,12 +97,12 @@ function showHelp() {
 Claude Orchestrator v1.0.0
 
 Usage:
-  co spawn <name> <description>  - Spawn new task
-  co check                       - Check & merge completed tasks
-  co list                        - List all tasks globally
-  co merge <name>                - Manually merge a task
-  co kill <name>                 - Kill/delete a task
-  co nuke --confirm              - ERASE ALL TASKS (requires --confirm)
+  co spawn <name> <description>      - Spawn new task
+  co check                           - Check & merge completed tasks
+  co list                            - List all tasks globally
+  co merge <task-id|task-name>       - Manually merge a task
+  co kill <task-id|task-name>        - Kill/delete a task
+  co nuke --confirm                  - ERASE ALL TASKS (requires --confirm)
 
 Shortcuts:
   co s = spawn
@@ -114,9 +116,13 @@ Examples:
   co spawn update-ui "Update dashboard layout" main
   co check
   co list
-  co merge fix-auth
-  co kill fix-auth
+  co merge 4681ae30        (preferred: use task ID from list)
+  co merge fix-auth        (also works with task name)
+  co kill 4681ae30
   co nuke --confirm
+
+Note: Use 'co list' to see task IDs. Prefer IDs over names to avoid ambiguity.
+      Merge only merges - it does NOT run tests or builds. Handle that yourself.
 `);
 }
 main().catch(console.error);
