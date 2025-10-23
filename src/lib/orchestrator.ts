@@ -306,11 +306,11 @@ When done:
    - C/C++: make test && make
    - If unsure, ask the user what to run
 3. **COMMIT ALL YOUR WORK** - Run git add -A && git commit with descriptive message
-4. Create .claude-o folder: mkdir -p .claude-o
-5. Create .claude-o/<timestamp>_${task.taskName}-${task.id.substring(0, 8)}.task_complete with summary
-6. Commit the completion file: git add .claude-o && git commit -m "docs: task complete"
-7. Ask user if they want to merge the task back to ${task.baseBranch}
-8. If yes, use mcp__claude-o__merge_task tool (only merges - no tests)
+4. Create .claude-o/<timestamp>_${task.taskName}-${task.id.substring(0, 8)}.task_complete with summary
+5. **COMMIT TASK FILES** - Run git add .claude-o && git commit -m "docs: task complete"
+   This archives the task for history - all files in .claude-o will be merged and kept
+6. Ask user if they want to merge the task back to ${task.baseBranch}
+7. If yes, use mcp__claude-o__merge_task tool (only merges - no tests)
 
 IMPORTANT:
 - **YOU MUST DETECT and run the right tests!** Don't use hardcoded commands.
@@ -323,16 +323,10 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
 `
     };
 
-    // Create .claude-o directory in worktree and ensure .gitignore
+    // Create .claude-o directory in worktree
     const claudeODir = path.join(task.worktreePath, '.claude-o');
     if (!fs.existsSync(claudeODir)) {
       fs.mkdirSync(claudeODir, { recursive: true });
-
-      // Create .gitignore to exclude task files but keep the folder
-      const gitignorePath = path.join(claudeODir, '.gitignore');
-      if (!fs.existsSync(gitignorePath)) {
-        fs.writeFileSync(gitignorePath, '# Ignore all task-related files\n*.task_complete\n*.context.json\n*.task.md\n\n# Keep the directory\n!.gitignore\n');
-      }
     }
 
     // Use timestamp for unique filenames (migration-style: timestamp first)
@@ -343,23 +337,27 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
     // Format: <timestamp>_<task-name>-<short-id>
     const filePrefix = `${timestamp}_${task.taskName}-${shortId}`;
 
+    // Write context JSON
     fs.writeFileSync(
       path.join(claudeODir, `${filePrefix}.context.json`),
       JSON.stringify(contextData, null, 2)
     );
 
-    // Write TASK.md to both locations:
-    // 1. In .claude-o for permanent history
-    fs.writeFileSync(
-      path.join(claudeODir, `${filePrefix}.task.md`),
-      contextData.instructions
-    );
+    // Write TASK.md ONLY in .claude-o (versioned, no conflicts)
+    const taskMdPath = path.join(claudeODir, `${filePrefix}.task.md`);
+    fs.writeFileSync(taskMdPath, contextData.instructions);
 
-    // 2. In worktree root for easy access by Claude
-    fs.writeFileSync(
-      path.join(task.worktreePath, 'TASK.md'),
-      contextData.instructions
-    );
+    // Create a symlink in root for easy access (won't cause merge conflicts)
+    const symlinkPath = path.join(task.worktreePath, 'TASK.md');
+    try {
+      if (fs.existsSync(symlinkPath)) {
+        fs.unlinkSync(symlinkPath);
+      }
+      fs.symlinkSync(path.relative(task.worktreePath, taskMdPath), symlinkPath);
+    } catch (error) {
+      // If symlink fails (Windows?), just copy the file
+      fs.writeFileSync(symlinkPath, contextData.instructions);
+    }
   }
   
   private launchClaude(task: GlobalTask) {
