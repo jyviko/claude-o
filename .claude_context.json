@@ -1,11 +1,11 @@
 {
   "task": {
     "id": "74e0ab4f-1bac-477b-8996-5883acf45259",
-    "projectPath": "/Users/kourtis/Sources/claude-o",
+    "projectPath": "~/Sources/claude-o",
     "projectName": "claude-o",
     "taskName": "test-task",
     "description": "This is a test task",
-    "worktreePath": "/Users/kourtis/.claude-o/worktrees/claude-o/test-task-1761048603160",
+    "worktreePath": "~/.claude-o/worktrees/claude-o/test-task-1761048603160",
     "branch": "fix/test-task-1761048603160",
     "baseBranch": "features/test",
     "status": "active",
@@ -13,10 +13,10 @@
   },
   "orchestrator": {
     "version": "1.0.0",
-    "configDir": "/Users/kourtis/.claude-o",
+    "configDir": "~/.claude-o",
     "settings": {
       "defaultBaseBranch": "master",
-      "worktreesBaseDir": "/Users/kourtis/.claude-o/worktrees",
+      "worktreesBaseDir": "~/.claude-o/worktrees",
       "autoMerge": true,
       "runTests": true,
       "testCommands": [
@@ -27,5 +27,5 @@
       "claudeCommand": "claude"
     }
   },
-  "instructions": "\n# Task: test-task\n\n## Description\nThis is a test task\n\n## Project\n- Name: claude-o\n- Path: /Users/kourtis/Sources/claude-o\n- Branch: fix/test-task-1761048603160\n- Base: features/test\n\n## Instructions\n1. Work ONLY on this specific task\n2. Do not refactor unrelated code\n3. Stay in this worktree directory\n4. Create .task_complete when done\n\n## Testing\nBefore marking complete:\n- Run: yarn test\n- Run: yarn build\n\n## Completion\nWhen done:\n1. Create .task_complete with a summary of changes\n2. Ask the user if they want to merge the task back to features/test\n3. If yes, use the mcp__claude-o__merge_task tool to merge this task\n"
+  "instructions": "\n# Task: test-task\n\n## Description\nThis is a test task\n\n## Project\n- Name: claude-o\n- Path: ~/Sources/claude-o\n- Branch: fix/test-task-1761048603160\n- Base: features/test\n\n## Instructions\n1. Work ONLY on this specific task\n2. Do not refactor unrelated code\n3. Stay in this worktree directory\n4. Create .task_complete when done\n\n## Testing\nBefore marking complete:\n- Run: yarn test\n- Run: yarn build\n\n## Completion\nWhen done:\n1. Create .task_complete with a summary of changes\n2. Ask the user if they want to merge the task back to features/test\n3. If yes, use the mcp__claude-o__merge_task tool to merge this task\n"
 }

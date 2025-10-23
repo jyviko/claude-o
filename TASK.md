@@ -6,7 +6,7 @@ This is a test task
 
 ## Project
 - Name: claude-o
-- Path: /Users/kourtis/Sources/claude-o
+- Path: ~/Sources/claude-o
 - Branch: fix/test-task-1761048603160
 - Base: features/test
 
