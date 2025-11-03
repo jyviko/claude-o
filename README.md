@@ -6,9 +6,21 @@ A global task orchestration system for Claude Code that uses git worktrees to ru
 
 - **Parallel Task Execution**: Spawn multiple Claude instances working on different tasks simultaneously
 - **Git Worktree Integration**: Each task gets its own isolated git worktree
+- **Tmux Session Management**: Each task runs in a named tmux session for easy coordination
+- **Command Injection**: Send commands to task terminals via `co send` for cross-task coordination
 - **MCP Server Integration**: Seamlessly integrates with Claude Code via Model Context Protocol
-- **Task Management**: Track, merge, and clean up tasks across all your projects
+- **Task Management**: Track, merge, close, and clean up tasks across all your projects
 - **Auto-merge**: Automatically merge completed tasks back to base branch
+
+## Prerequisites
+
+- **macOS**: tmux (for terminal session management and command coordination)
+  ```bash
+  brew install tmux
+  ```
+- **Linux**: tmux is usually pre-installed or available via package manager
+- **Git**: For worktree management
+- **Node.js**: For running the CLI and MCP server
 
 ## Installation
 
@@ -26,7 +38,7 @@ This will:
 2. Install dependencies with `yarn`
 3. Build the TypeScript code
 4. Add the `co` command alias to your shell
-5. Detect and configure your preferred terminal (macOS: Terminal or iTerm)
+5. Detect and configure your preferred terminal (macOS: defaults to iTerm if available, otherwise Terminal)
 6. Configure the MCP server for Claude Code
 
 After installation, restart your shell or run:
@@ -42,7 +54,7 @@ rm -rf /tmp/claude-o
 ### CLI Commands
 
 ```bash
-# Spawn a new task
+# Spawn a new task (opens in tmux session)
 co spawn fix-auth "Fix authentication token refresh bug"
 
 # List all tasks
@@ -51,8 +63,14 @@ co list
 # Check and merge completed tasks
 co check
 
+# Mark a task as complete without deleting worktree
+co close fix-auth
+
 # Manually merge a specific task
 co merge fix-auth
+
+# Send command to a task's tmux session
+co send fix-auth "npm test"
 
 # Kill/delete a task
 co kill fix-auth
@@ -60,6 +78,12 @@ co kill fix-auth
 # Erase ALL tasks for current project (dangerous!)
 co nuke --confirm
 ```
+
+**Tmux Integration:**
+- Each spawned task runs in a tmux session named after its branch
+- Use `co send <task-id> <command>` to inject commands into task terminals
+- Attach to a session: `tmux attach -t fix-<task>-<timestamp>`
+- List sessions: `tmux list-sessions`
 
 ### Claude Code Integration (MCP)
 
@@ -84,6 +108,13 @@ Check all active tasks for completion and automatically merge completed ones.
 
 ```
 Check if any of my tasks are completed
+```
+
+#### `close_task`
+Mark a task as completed without deleting the worktree or branch. Useful when you've manually implemented a task.
+
+```
+Close the fix-auth task
 ```
 
 #### `merge_task`
@@ -122,11 +153,11 @@ Edit `~/.claude-o/config/global-settings.json`:
 
 The `terminalApp` setting controls which terminal application opens when spawning tasks:
 
-- **macOS**: `"default"` (Terminal.app) or `"iterm"` (iTerm)
+- **macOS**: `"iterm"` (iTerm - default) or `"default"` (Terminal.app)
 - **Linux**: `"default"` (gnome-terminal), `"alacritty"`, or `"wezterm"`
 - **Windows**: Uses `cmd` by default
 
-The installer will automatically detect and configure your preferred terminal on macOS.
+The installer will automatically detect and configure your preferred terminal on macOS (defaults to iTerm if available).
 
 ### MCP Server
 

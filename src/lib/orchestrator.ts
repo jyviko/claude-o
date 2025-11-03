@@ -46,7 +46,7 @@ export class GlobalClaudeOrchestrator {
         autoMerge: true,
         runTests: true,
         testCommands: ['yarn test', 'yarn build'],
-        terminalApp: 'default',
+        terminalApp: 'iterm',
         claudeCommand: 'claude'
       };
       fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));

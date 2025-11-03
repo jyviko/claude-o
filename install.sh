@@ -88,24 +88,24 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   if [ "$ITERM_INSTALLED" = true ]; then
     echo ""
     echo "Detected terminal applications:"
-    echo "  1) Terminal (macOS default)"
-    echo "  2) iTerm"
+    echo "  1) iTerm (recommended)"
+    echo "  2) Terminal (macOS default)"
     echo ""
     read -p "Which terminal would you like to use? (1/2, default: 1): " TERMINAL_CHOICE
 
     case "$TERMINAL_CHOICE" in
       2)
-        TERMINAL_PREF="iterm"
-        echo "✅ Will use iTerm for spawning tasks"
-        ;;
-      *)
         TERMINAL_PREF="default"
         echo "✅ Will use Terminal.app for spawning tasks"
+        ;;
+      *)
+        TERMINAL_PREF="iterm"
+        echo "✅ Will use iTerm for spawning tasks"
         ;;
     esac
   else
     TERMINAL_PREF="default"
-    echo "✅ Will use Terminal.app for spawning tasks"
+    echo "✅ Will use Terminal.app for spawning tasks (iTerm not found)"
   fi
 
   # Update the settings file if it exists
