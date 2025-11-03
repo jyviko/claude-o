@@ -279,7 +279,10 @@ ${task.description}
 1. Work ONLY on this specific task
 2. Do not refactor unrelated code
 3. Stay in this worktree directory
-4. Create .task_complete when done
+4. When you receive new requests via tmux, APPEND them to the TASK.md file in .claude-o
+   - Use \`echo "\\n## Update: $(date)" >> .claude-o/*_${task.taskName}-*.task.md\`
+   - Then append the new request details
+5. Create .task_complete when done
 
 ## Testing & Validation
 Before marking complete, run sanity checks appropriate for this codebase:
@@ -346,37 +349,129 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
     // Write TASK.md ONLY in .claude-o (versioned, no conflicts)
     const taskMdPath = path.join(claudeODir, `${filePrefix}.task.md`);
     fs.writeFileSync(taskMdPath, contextData.instructions);
-
-    // Create a symlink in root for easy access (won't cause merge conflicts)
-    const symlinkPath = path.join(task.worktreePath, 'TASK.md');
-    try {
-      if (fs.existsSync(symlinkPath)) {
-        fs.unlinkSync(symlinkPath);
-      }
-      fs.symlinkSync(path.relative(task.worktreePath, taskMdPath), symlinkPath);
-    } catch (error) {
-      // If symlink fails (Windows?), just copy the file
-      fs.writeFileSync(symlinkPath, contextData.instructions);
-    }
   }
   
+  sendCommandToTask(taskNameOrId: string, command: string, projectPath?: string): void {
+    let project: Project | undefined;
+
+    // Try to detect project if not provided
+    if (projectPath) {
+      project = this.getProject(projectPath);
+    } else {
+      try {
+        project = this.detectProject();
+      } catch (error) {
+        project = undefined;
+      }
+    }
+
+    // Find the task
+    let task: GlobalTask | undefined;
+
+    if (project) {
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND project_path = ?
+          AND status = 'active'
+      `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    } else {
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(taskNameOrId, `${taskNameOrId}%`) as GlobalTask | undefined;
+    }
+
+    if (!task) {
+      console.error(`❌ Task not found: ${taskNameOrId}`);
+      return;
+    }
+
+    // Get tmux session from metadata
+    // Note: metadata comes from SQLite as a string (JSON), need to parse it
+    const metadata = task.metadata
+      ? (typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata)
+      : {};
+    const tmuxSession = metadata.tmuxSession;
+
+    if (!tmuxSession) {
+      console.error(`❌ No tmux session found for task: ${task.taskName}`);
+      console.log('   This task may have been created before tmux integration.');
+      return;
+    }
+
+    // Send command to tmux session
+    try {
+      execSync(`tmux send-keys -t ${JSON.stringify(tmuxSession)} ${JSON.stringify(command)} C-m`, { stdio: 'inherit' });
+      console.log(`✅ Command sent to ${task.taskName} (session: ${tmuxSession})`);
+    } catch (error: any) {
+      console.error(`❌ Failed to send command: ${error.message}`);
+      console.log(`   Session may have been closed. Try: tmux attach -t ${tmuxSession}`);
+    }
+  }
+
   private launchClaude(task: GlobalTask) {
-    const prompt = `Read TASK.md for your focused task: ${task.taskName}`;
+    const taskMdPath = `.claude-o/*_${task.taskName}-${task.id.substring(0, 8)}.task.md`;
+    const prompt = `Read ${taskMdPath} for your focused task: ${task.taskName}`;
+
+    // Use branch name as tmux session name for easy identification
+    const tmuxSessionName = task.branch.replace(/\//g, '-'); // Replace / with - for valid session name
     const windowTitle = `Claude-O: ${task.taskName}`;
 
     if (process.platform === 'darwin') {
-      // macOS - use proper escaping via JSON.stringify for bash command
-      const bashCommand = `cd ${JSON.stringify(task.worktreePath)} && echo -e "\\033]0;${windowTitle}\\007" && ${this.settings.claudeCommand} ${JSON.stringify(prompt)}`;
+      // macOS - use tmux for session management
+      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} "${this.settings.claudeCommand} ${JSON.stringify(prompt)}"`;
+
+      console.log(`🚀 Launching Claude in tmux session: ${tmuxSessionName}`);
+      console.log(`   Control with: tmux attach -t ${tmuxSessionName}`);
+      console.log(`   Send commands: tmux send-keys -t ${tmuxSessionName} "command" C-m`);
 
       const appleScriptCommand = this.settings.terminalApp === 'iterm' ?
-        `tell application "iTerm" to tell (create window with default profile) to tell current session to write text ${JSON.stringify(bashCommand)}` :
-        `tell application "Terminal" to do script ${JSON.stringify(bashCommand)}`;
-
-      console.log(`🚀 Launching Claude in ${this.settings.terminalApp === 'iterm' ? 'iTerm' : 'Terminal'}...`);
+        `tell application "iTerm" to tell (create window with default profile) to tell current session to write text ${JSON.stringify(tmuxCommand)}` :
+        `tell application "Terminal" to do script ${JSON.stringify(tmuxCommand)}`;
 
       try {
         execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`);
         console.log(`✅ Terminal opened successfully`);
+
+        // Store session info in task metadata
+        this.db.prepare(`
+          UPDATE tasks
+          SET metadata = ?
+          WHERE id = ?
+        `).run(JSON.stringify({ tmuxSession: tmuxSessionName }), task.id);
+
       } catch (error) {
         console.error(`❌ Failed to open terminal:`, error);
         throw error;
@@ -388,14 +483,14 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
       execSync(`start cmd /k ${JSON.stringify(bashCommand)}`);
 
     } else {
-      // Linux
+      // Linux - also use tmux
+      const tmuxCommand = `cd ${task.worktreePath} && tmux new-session -s ${tmuxSessionName} -n ${task.taskName} "${this.settings.claudeCommand} ${prompt}"`;
+
       const terminal = this.settings.terminalApp === 'alacritty' ? 'alacritty' :
                        this.settings.terminalApp === 'wezterm' ? 'wezterm' :
                        'gnome-terminal';
 
-      const bashCommand = `cd ${JSON.stringify(task.worktreePath)} && ${this.settings.claudeCommand} ${JSON.stringify(prompt)}; exec bash`;
-
-      spawn(terminal, ['--', 'bash', '-c', bashCommand], { detached: true });
+      spawn(terminal, ['--', 'bash', '-c', tmuxCommand], { detached: true });
     }
   }
   
@@ -475,6 +570,31 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         console.log('   The worktree may have been deleted. Cannot merge.');
         process.chdir(originalCwd);
         return false;
+      }
+
+      // Revert files that should not be merged (settings.local.json, TASK.md in root)
+      console.log('\n🔄 Reverting files that should not be merged...');
+
+      // Revert settings.local.json if it exists
+      const settingsLocalPath = path.join(task.worktreePath, 'settings.local.json');
+      if (fs.existsSync(settingsLocalPath)) {
+        try {
+          execSync(`git -C "${task.worktreePath}" checkout ${task.baseBranch} -- settings.local.json`, { stdio: 'pipe' });
+          console.log('   ✅ Reverted settings.local.json to base branch version');
+        } catch (error) {
+          // File might not exist in base branch, that's okay
+        }
+      }
+
+      // Remove TASK.md from root if it exists (should only be in .claude-o)
+      const taskMdRootPath = path.join(task.worktreePath, 'TASK.md');
+      if (fs.existsSync(taskMdRootPath)) {
+        try {
+          fs.unlinkSync(taskMdRootPath);
+          console.log('   ✅ Removed TASK.md from root (kept in .claude-o)');
+        } catch (error) {
+          // Ignore if can't delete
+        }
       }
 
       // Ensure all changes are committed in the worktree
@@ -638,6 +758,101 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
       console.log(`\n✅ Successfully merged ${task.taskName}`);
     } else {
       console.log(`\n❌ Merge failed. Please resolve conflicts.`);
+    }
+  }
+
+  closeTask(taskNameOrId: string, projectPath?: string): void {
+    let project: Project | undefined;
+
+    // Try to detect project if not provided
+    if (projectPath) {
+      project = this.getProject(projectPath);
+    } else {
+      try {
+        project = this.detectProject();
+      } catch (error) {
+        // Not in a git repo, will search all projects
+        project = undefined;
+      }
+    }
+
+    // Find the task - support both task name and task ID (or partial ID)
+    let task: GlobalTask | undefined;
+
+    if (project) {
+      // Search within specific project
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND project_path = ?
+          AND status = 'active'
+      `).get(taskNameOrId, `${taskNameOrId}%`, project.path) as GlobalTask | undefined;
+    } else {
+      // Search across all projects
+      task = this.db.prepare(`
+        SELECT
+          id,
+          project_path as projectPath,
+          project_name as projectName,
+          task_name as taskName,
+          description,
+          worktree_path as worktreePath,
+          branch,
+          base_branch as baseBranch,
+          status,
+          created_at as createdAt,
+          completed_at as completedAt,
+          merged_at as mergedAt,
+          metadata
+        FROM tasks
+        WHERE (task_name = ? OR id LIKE ?)
+          AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(taskNameOrId, `${taskNameOrId}%`) as GlobalTask | undefined;
+    }
+
+    if (!task) {
+      console.error(`❌ Task not found: ${taskNameOrId}`);
+      return;
+    }
+
+    try {
+      console.log(`✅ Closing task: ${task.taskName}`);
+      console.log(`   This marks the task as completed but keeps the worktree and branch.`);
+      console.log(`   Worktree: ${task.worktreePath}`);
+      console.log(`   Branch: ${task.branch}`);
+
+      // Update database to mark as completed
+      this.db.prepare(`
+        UPDATE tasks
+        SET status = 'completed', completed_at = ?
+        WHERE id = ?
+      `).run(new Date().toISOString(), task.id);
+
+      console.log(`✅ Task closed: ${task.taskName}`);
+      console.log(`   Use 'co merge ${task.id.substring(0, 8)}' to merge it later.`);
+      console.log(`   Use 'co kill ${task.id.substring(0, 8)}' to delete it without merging.`);
+
+      this.logTask('close', task);
+
+    } catch (error: any) {
+      console.error(`❌ Failed to close task: ${error.message}`);
+      throw error;
     }
   }
 
