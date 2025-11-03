@@ -81,6 +81,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'close_task',
+        description: 'Mark a task as completed without deleting the worktree or branch. Use this when you have manually implemented a task. The task can still be merged later.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskNameOrId: {
+              type: 'string',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
+            },
+          },
+          required: ['taskNameOrId'],
+        },
+      },
+      {
         name: 'kill_task',
         description: 'Kill and remove a specific task, deleting its worktree and branch. Use list_tasks to get task IDs.',
         inputSchema: {
@@ -205,6 +219,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         orchestrator.manualMerge(taskNameOrId);
+
+        console.log = originalLog;
+        console.error = originalError;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case 'close_task': {
+        const { taskNameOrId } = args as { taskNameOrId: string };
+
+        const originalLog = console.log;
+        const originalError = console.error;
+        let output = '';
+
+        console.log = (...logArgs: any[]) => {
+          output += logArgs.join(' ') + '\n';
+        };
+        console.error = (...errorArgs: any[]) => {
+          output += 'ERROR: ' + errorArgs.join(' ') + '\n';
+        };
+
+        orchestrator.closeTask(taskNameOrId);
 
         console.log = originalLog;
         console.error = originalError;
