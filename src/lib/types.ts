@@ -32,6 +32,8 @@ export interface ClaudeToolCall {
   };
 }
 
+export type AIProvider = 'claude' | 'codex';
+
 export interface GlobalSettings {
   defaultBaseBranch: string;
   worktreesBaseDir: string;
@@ -40,4 +42,6 @@ export interface GlobalSettings {
   testCommands: string[];
   terminalApp: 'default' | 'iterm' | 'wezterm' | 'alacritty';
   claudeCommand: string;
+  provider: AIProvider;
+  codexCommand?: string;
 }

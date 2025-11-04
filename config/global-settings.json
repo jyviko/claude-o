@@ -9,5 +9,7 @@
     "npm run build"
   ],
   "terminalApp": "default",
-  "claudeCommand": "claude"
+  "claudeCommand": "claude",
+  "provider": "claude",
+  "codexCommand": "codex"
 }
