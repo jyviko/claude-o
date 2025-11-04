@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import Database from 'better-sqlite3';
 import { GlobalTask, Project, GlobalSettings } from './types';
@@ -452,7 +452,10 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
 
     // Send command to tmux session
     try {
-      execSync(`tmux send-keys -t ${JSON.stringify(tmuxSession)} ${JSON.stringify(command)} C-m`, { stdio: 'inherit' });
+      // Send the command text
+      execSync(`tmux send-keys -t ${JSON.stringify(tmuxSession)} ${JSON.stringify(command)}`, { stdio: 'pipe' });
+      // Send Enter as separate command to submit
+      execSync(`tmux send-keys -t ${JSON.stringify(tmuxSession)} C-m`, { stdio: 'pipe' });
       console.log(`✅ Command sent to ${task.taskName} (session: ${tmuxSession})`);
     } catch (error: any) {
       throw new Error(`Failed to send command: ${error.message}. Session may have been closed. Try: tmux attach -t ${tmuxSession}`);

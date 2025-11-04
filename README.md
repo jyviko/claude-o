@@ -39,8 +39,7 @@ This will:
 2. Install dependencies with `yarn`
 3. Build the TypeScript code
 4. Add the `co` command alias to your shell
-5. Detect and configure your preferred terminal (macOS: defaults to iTerm if available, otherwise Terminal)
-6. Configure the MCP server for Claude Code
+5. Configure the MCP server for Claude Code
 
 After installation, restart your shell or run:
 ```bash
@@ -55,8 +54,11 @@ rm -rf /tmp/claude-o
 ### CLI Commands
 
 ```bash
-# Spawn a new task (opens in tmux session)
+# Spawn a new task (creates detached tmux session)
 co spawn fix-auth "Fix authentication token refresh bug"
+
+# Attach to the task's tmux session to work on it
+tmux attach -t fix-fix-auth-<timestamp>
 
 # List all tasks
 co list
@@ -70,7 +72,7 @@ co close fix-auth
 # Manually merge a specific task
 co merge fix-auth
 
-# Send command to a task's tmux session
+# Send command to a task's tmux session (from main terminal)
 co send fix-auth "npm test"
 
 # Kill/delete a task
@@ -80,11 +82,13 @@ co kill fix-auth
 co nuke --confirm
 ```
 
-**Tmux Integration:**
-- Each spawned task runs in a tmux session named after its branch
-- Use `co send <task-id> <command>` to inject commands into task terminals
-- Attach to a session: `tmux attach -t fix-<task>-<timestamp>`
-- List sessions: `tmux list-sessions`
+**Tmux Workflow:**
+- Tasks run in **detached** tmux sessions (background)
+- Attach when you want to work: `tmux attach -t <session-name>`
+- Detach to return to main terminal: `Ctrl+b`, then `d`
+- Send commands from main terminal: `co send <task-id> "command"`
+- List all sessions: `tmux list-sessions`
+- Sessions persist even after closing terminal windows
 
 ### Claude Code Integration (MCP)
 
@@ -113,18 +117,18 @@ Check all active tasks for completion and automatically merge completed ones.
 Check if any of my tasks are completed
 ```
 
+**`close_task`**
+Mark a task as completed without deleting the worktree or branch. Useful when you've manually implemented a task.
+
+```
+Close the fix-auth task
+```
+
 **`merge_task`**
 Manually merge a specific task back to its base branch.
 
 ```
 Merge the fix-auth task
-```
-
-**`close_task`**
-Mark a task as completed and terminate its tmux session. Worktree and branch are preserved.
-
-```
-Close the fix-auth task
 ```
 
 **`kill_task`**
@@ -187,7 +191,7 @@ Edit `~/.claude-o/config/global-settings.json`:
 
 ```json
 {
-  "defaultBaseBranch": "develop",
+  "defaultBaseBranch": "master",
   "worktreesBaseDir": "~/.claude-o/worktrees",
   "autoMerge": true,
   "runTests": true,
@@ -302,8 +306,8 @@ All files are installed to `~/.claude-o` regardless of where you cloned the repo
 1. **Task Spawning**: When you spawn a task, the orchestrator:
    - Creates a new git worktree in `~/.claude-o/worktrees/<project>/<task-timestamp>/`
    - Creates a new branch `fix/<task-name-timestamp>`
-   - Generates a `TASK.md` file with task details
-   - Opens a new terminal with Claude Code running in that worktree
+   - Generates task files in `.claude-o/` directory with versioned naming
+   - Launches Claude in a detached tmux session (runs in background)
 
 2. **Task Completion**: When a task is complete:
    - Create a `.task_complete` file in the worktree
@@ -338,30 +342,58 @@ All files are installed to `~/.claude-o` regardless of where you cloned the repo
 ```bash
 # From your main project directory
 co spawn add-dark-mode "Implement dark mode toggle in settings"
+# 🚀 Launched Claude in tmux session: fix-add-dark-mode-1234567
+#    Attach with: tmux attach -t fix-add-dark-mode-1234567
 
-# A new terminal opens with Claude in the worktree
-# Work on the feature...
-# When done, create completion flag:
-touch .task_complete
+# Attach to work on it
+tmux attach -t fix-add-dark-mode-1234567
 
-# Back in main terminal
+# Claude works on the feature...
+# When done, detach: Ctrl+b, then d
+
+# Check and merge
 co check  # Auto-merges the completed task
 ```
 
-### Example 2: Fix Multiple Bugs
+### Example 2: Fix Multiple Bugs in Parallel
 ```bash
+# Spawn three tasks (all run in background)
 co spawn fix-auth "Fix token refresh bug"
 co spawn fix-ui "Fix button alignment on mobile"
 co spawn fix-api "Handle API timeout errors"
 
-# Three terminals open, each with Claude working on a different bug
-# Work proceeds in parallel
+# All three Claude instances are now working in parallel
+# Attach to any one to monitor/interact:
+tmux attach -t fix-fix-auth-1234567
 
+# Or send commands from main terminal:
+co send <task-id> "npm test"
+
+# Check status
 co list  # See all active tasks
 co check # Merge any completed tasks
 ```
 
-### Example 3: Using from Claude Code
+### Example 3: Coordinate Multiple Tasks
+```bash
+# Spawn frontend and backend tasks
+co spawn ui-update "Update dashboard UI"
+co spawn api-update "Update API endpoints"
+
+# From main terminal, coordinate testing:
+co send <ui-task-id> "npm run test:ui"
+co send <api-task-id> "npm run test:api"
+
+# Attach to review one:
+tmux attach -t fix-ui-update-1234567
+# Detach when done: Ctrl+b, then d
+
+# Merge when ready
+co merge <ui-task-id>
+co merge <api-task-id>
+```
+
+### Example 4: Using from Claude Code
 ```
 Me: I need to refactor the authentication module and add comprehensive tests.
     Can you spawn separate tasks for the refactoring and testing?

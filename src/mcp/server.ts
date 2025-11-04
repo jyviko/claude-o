@@ -95,6 +95,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'send_command',
+        description: 'Send a command to a task\'s tmux session. Useful for coordinating tasks, sending new instructions to Claude, or running commands in spawned task terminals.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskNameOrId: {
+              type: 'string',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
+            },
+            command: {
+              type: 'string',
+              description: 'The command to send to the task\'s tmux session. This will be typed and submitted automatically.',
+            },
+          },
+          required: ['taskNameOrId', 'command'],
+        },
+      },
+      {
         name: 'kill_task',
         description: 'Kill and remove a specific task, deleting its worktree and branch. Use list_tasks to get task IDs.',
         inputSchema: {
@@ -292,6 +310,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         orchestrator.closeTask(taskNameOrId);
+
+        console.log = originalLog;
+        console.error = originalError;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case 'send_command': {
+        const { taskNameOrId, command } = args as { taskNameOrId: string; command: string };
+
+        const originalLog = console.log;
+        const originalError = console.error;
+        let output = '';
+
+        console.log = (...logArgs: any[]) => {
+          output += logArgs.join(' ') + '\n';
+        };
+        console.error = (...errorArgs: any[]) => {
+          output += 'ERROR: ' + errorArgs.join(' ') + '\n';
+        };
+
+        orchestrator.sendCommandToTask(taskNameOrId, command);
 
         console.log = originalLog;
         console.error = originalError;
