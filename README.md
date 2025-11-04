@@ -1,10 +1,11 @@
-# Claude Orchestrator
+# AI Task Orchestrator (formerly Claude Orchestrator)
 
-A global task orchestration system for Claude Code that uses git worktrees to run multiple parallel Claude sessions on independent tasks.
+A global task orchestration system that uses git worktrees to run multiple parallel AI coding assistant sessions on independent tasks. Supports both Claude Code and OpenAI GPT models.
 
 ## Features
 
-- **Parallel Task Execution**: Spawn multiple Claude instances working on different tasks simultaneously
+- **Multiple AI Providers**: Choose between Claude Code or OpenAI (GPT-4, GPT-3.5, etc.)
+- **Parallel Task Execution**: Spawn multiple AI assistant instances working on different tasks simultaneously
 - **Git Worktree Integration**: Each task gets its own isolated git worktree
 - **Tmux Session Management**: Each task runs in a named tmux session for easy coordination
 - **Command Injection**: Send commands to task terminals via `co send` for cross-task coordination
@@ -145,9 +146,48 @@ Edit `~/.claude-o/config/global-settings.json`:
   "runTests": true,
   "testCommands": ["npm test", "npm run lint", "npm run build"],
   "terminalApp": "default",
-  "claudeCommand": "claude"
+  "claudeCommand": "claude",
+  "provider": "claude",
+  "openaiApiKey": "",
+  "openaiModel": "gpt-4",
+  "openaiBaseUrl": "https://api.openai.com"
 }
 ```
+
+#### AI Provider Configuration
+
+The `provider` setting determines which AI assistant to use for tasks. Available options:
+
+**Claude** (`"provider": "claude"`)
+- Uses Claude Code CLI
+- Requires Claude Code to be installed (`claude` command available)
+- Best integration with MCP tools
+- Configuration:
+  - `claudeCommand`: Command to launch Claude (default: `"claude"`)
+
+**OpenAI** (`"provider": "openai"`)
+- Uses OpenAI's Chat Completions API (GPT-4, GPT-3.5, etc.)
+- Requires OpenAI API key
+- Configuration:
+  - `openaiApiKey`: Your OpenAI API key (get from https://platform.openai.com/api-keys)
+  - `openaiModel`: Model to use (default: `"gpt-4"`, options: `"gpt-4"`, `"gpt-3.5-turbo"`, `"gpt-4-turbo"`, etc.)
+  - `openaiBaseUrl`: API base URL (default: `"https://api.openai.com"`, can be changed for Azure OpenAI or other compatible APIs)
+
+##### Setting up OpenAI
+
+1. Get your API key from https://platform.openai.com/api-keys
+2. Edit `~/.claude-o/config/global-settings.json`:
+   ```json
+   {
+     "provider": "openai",
+     "openaiApiKey": "sk-your-api-key-here",
+     "openaiModel": "gpt-4"
+   }
+   ```
+3. Spawn a task as usual: `co spawn fix-bug "Fix authentication bug"`
+4. An interactive chat interface with OpenAI will open in your terminal
+
+**Note**: OpenAI provider uses API calls which incur costs. Check OpenAI's pricing at https://openai.com/pricing
 
 #### Terminal App Options
 

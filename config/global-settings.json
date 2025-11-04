@@ -9,5 +9,9 @@
     "npm run build"
   ],
   "terminalApp": "default",
-  "claudeCommand": "claude"
+  "claudeCommand": "claude",
+  "provider": "claude",
+  "openaiApiKey": "",
+  "openaiModel": "gpt-4",
+  "openaiBaseUrl": "https://api.openai.com"
 }

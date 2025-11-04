@@ -5,6 +5,7 @@ import { execSync, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import Database from 'better-sqlite3';
 import { GlobalTask, Project, GlobalSettings } from './types';
+import { getProvider } from './providers';
 
 export class GlobalClaudeOrchestrator {
   private db!: Database.Database;
@@ -47,7 +48,8 @@ export class GlobalClaudeOrchestrator {
         runTests: true,
         testCommands: ['yarn test', 'yarn build'],
         terminalApp: 'iterm',
-        claudeCommand: 'claude'
+        claudeCommand: 'claude',
+        provider: 'claude'
       };
       fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
     }
@@ -56,10 +58,22 @@ export class GlobalClaudeOrchestrator {
   private loadSettings() {
     const settingsPath = path.join(this.configDir, 'config', 'global-settings.json');
     this.settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-    
+
+    // Ensure provider is set (for backward compatibility)
+    if (!this.settings.provider) {
+      this.settings.provider = 'claude';
+    }
+
     // Ensure worktrees directory exists
     if (!fs.existsSync(this.settings.worktreesBaseDir)) {
       fs.mkdirSync(this.settings.worktreesBaseDir, { recursive: true });
+    }
+
+    // Validate provider configuration
+    const provider = getProvider(this.settings);
+    const validationError = provider.validate(this.settings);
+    if (validationError) {
+      console.warn(`⚠️  Warning: ${validationError}`);
     }
   }
   
@@ -442,55 +456,26 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
   }
 
   private launchClaude(task: GlobalTask) {
-    const taskMdPath = `.claude-o/*_${task.taskName}-${task.id.substring(0, 8)}.task.md`;
-    const prompt = `Read ${taskMdPath} for your focused task: ${task.taskName}`;
+    // Get the appropriate provider
+    const provider = getProvider(this.settings);
 
-    // Use branch name as tmux session name for easy identification
-    const tmuxSessionName = task.branch.replace(/\//g, '-'); // Replace / with - for valid session name
-    const windowTitle = `Claude-O: ${task.taskName}`;
+    // Validate provider configuration
+    const validationError = provider.validate(this.settings);
+    if (validationError) {
+      console.error(`❌ ${validationError}`);
+      throw new Error(validationError);
+    }
 
-    if (process.platform === 'darwin') {
-      // macOS - use tmux for session management
-      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} "${this.settings.claudeCommand} ${JSON.stringify(prompt)}"`;
+    // Launch the provider
+    const tmuxSession = provider.launch(task, this.settings);
 
-      console.log(`🚀 Launching Claude in tmux session: ${tmuxSessionName}`);
-      console.log(`   Control with: tmux attach -t ${tmuxSessionName}`);
-      console.log(`   Send commands: tmux send-keys -t ${tmuxSessionName} "command" C-m`);
-
-      const appleScriptCommand = this.settings.terminalApp === 'iterm' ?
-        `tell application "iTerm" to tell (create window with default profile) to tell current session to write text ${JSON.stringify(tmuxCommand)}` :
-        `tell application "Terminal" to do script ${JSON.stringify(tmuxCommand)}`;
-
-      try {
-        execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`);
-        console.log(`✅ Terminal opened successfully`);
-
-        // Store session info in task metadata
-        this.db.prepare(`
-          UPDATE tasks
-          SET metadata = ?
-          WHERE id = ?
-        `).run(JSON.stringify({ tmuxSession: tmuxSessionName }), task.id);
-
-      } catch (error) {
-        console.error(`❌ Failed to open terminal:`, error);
-        throw error;
-      }
-
-    } else if (process.platform === 'win32') {
-      // Windows
-      const bashCommand = `cd /d ${JSON.stringify(task.worktreePath)} && ${this.settings.claudeCommand} ${JSON.stringify(prompt)}`;
-      execSync(`start cmd /k ${JSON.stringify(bashCommand)}`);
-
-    } else {
-      // Linux - also use tmux
-      const tmuxCommand = `cd ${task.worktreePath} && tmux new-session -s ${tmuxSessionName} -n ${task.taskName} "${this.settings.claudeCommand} ${prompt}"`;
-
-      const terminal = this.settings.terminalApp === 'alacritty' ? 'alacritty' :
-                       this.settings.terminalApp === 'wezterm' ? 'wezterm' :
-                       'gnome-terminal';
-
-      spawn(terminal, ['--', 'bash', '-c', tmuxCommand], { detached: true });
+    // Store session info in task metadata if available
+    if (tmuxSession) {
+      this.db.prepare(`
+        UPDATE tasks
+        SET metadata = ?
+        WHERE id = ?
+      `).run(JSON.stringify({ tmuxSession }), task.id);
     }
   }
   
