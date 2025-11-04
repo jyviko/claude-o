@@ -600,18 +600,85 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
 
       // Merge back to base branch (simple - no tests, no builds)
       const currentBranch = execSync('git branch --show-current', {
-        encoding: 'utf-8'
+        encoding: 'utf-8',
+        cwd: task.projectPath
       }).trim();
 
       console.log(`\n🔀 Merging ${task.branch} into ${task.baseBranch}...`);
 
-      execSync(`git checkout ${task.baseBranch}`, { stdio: 'inherit' });
+      // Check if base branch is already checked out somewhere
+      let baseBranchLocation = task.projectPath; // Default to main repo
+      try {
+        const worktreeList = execSync('git worktree list --porcelain', {
+          encoding: 'utf-8',
+          cwd: task.projectPath
+        });
+
+        // Parse worktree list to find where base branch is checked out
+        const lines = worktreeList.split('\n');
+        let currentWorktreePath = '';
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.startsWith('worktree ')) {
+            currentWorktreePath = line.substring('worktree '.length);
+          } else if (line.startsWith('branch ')) {
+            const branchName = line.substring('branch '.length).replace('refs/heads/', '');
+            if (branchName === task.baseBranch) {
+              baseBranchLocation = currentWorktreePath;
+              break;
+            }
+          }
+        }
+      } catch (error) {
+        // If we can't get worktree list, use default location
+      }
+
+      console.log(`   Base branch location: ${baseBranchLocation}`);
+
+      // If base branch is in a different location, we need to merge there
+      if (baseBranchLocation !== task.projectPath) {
+        console.log(`   Base branch ${task.baseBranch} is checked out at: ${baseBranchLocation}`);
+        process.chdir(baseBranchLocation);
+      }
+
+      // Check if we're already on the base branch
+      const currentBranchAtLocation = execSync('git branch --show-current', {
+        encoding: 'utf-8'
+      }).trim();
+
+      if (currentBranchAtLocation !== task.baseBranch) {
+        console.log(`   Switching to ${task.baseBranch}...`);
+        try {
+          execSync(`git checkout ${task.baseBranch}`, { stdio: 'inherit' });
+        } catch (checkoutError: any) {
+          // If checkout fails because branch is locked in another worktree, provide helpful error
+          if (checkoutError.message.includes('already used by worktree')) {
+            console.error(`\n❌ Cannot checkout ${task.baseBranch} - it's already checked out elsewhere.`);
+            console.error(`   This shouldn't happen as we detected its location above.`);
+            console.error(`   Try manually merging:`);
+            console.error(`   1. cd ${baseBranchLocation}`);
+            console.error(`   2. git merge --no-ff ${task.branch}`);
+            process.chdir(originalCwd);
+            return false;
+          }
+          throw checkoutError;
+        }
+      } else {
+        console.log(`   Already on ${task.baseBranch}`);
+      }
+
       execSync(`git merge --no-ff ${task.branch} -m "Merge: ${task.taskName} (automated)"`, { stdio: 'inherit' });
 
       console.log(`✅ Merged ${task.taskName} into ${task.baseBranch}`);
 
       // Clean up worktree
       console.log('\n🗑️  Cleaning up worktree...');
+
+      // Need to be in the main repo to remove worktree
+      if (process.cwd() !== task.projectPath) {
+        process.chdir(task.projectPath);
+      }
+
       execSync(`git worktree remove "${task.worktreePath}"`, { stdio: 'inherit' });
 
       // Update database
@@ -621,9 +688,14 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         WHERE id = ?
       `).run(new Date().toISOString(), new Date().toISOString(), task.id);
 
-      // Return to original branch
-      if (currentBranch && currentBranch !== task.baseBranch) {
-        execSync(`git checkout ${currentBranch}`, { stdio: 'inherit' });
+      // Return to original branch if we changed it
+      if (currentBranch && currentBranch !== task.baseBranch && baseBranchLocation === task.projectPath) {
+        console.log(`\n🔄 Returning to original branch: ${currentBranch}`);
+        try {
+          execSync(`git checkout ${currentBranch}`, { stdio: 'inherit' });
+        } catch (error) {
+          console.warn(`   ⚠️  Could not return to ${currentBranch}, staying on ${task.baseBranch}`);
+        }
       }
 
       process.chdir(originalCwd);
@@ -651,6 +723,12 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
           console.log('\n💡 Branch not found. The worktree branch may have been deleted.');
         } else if (stderr.includes('Please commit your changes')) {
           console.log('\n💡 Uncommitted changes in main repo. Commit or stash them first.');
+        } else if (stderr.includes('already used by worktree')) {
+          console.log('\n💡 Base branch is checked out in another worktree.');
+          console.log(`   The merge tool should have detected this automatically.`);
+          console.log(`   Try finding where ${task.baseBranch} is checked out:`);
+          console.log(`   git worktree list`);
+          console.log(`   Then merge manually from that location.`);
         }
       }
 
