@@ -88,48 +88,95 @@ co nuke --confirm
 
 ### Claude Code Integration (MCP)
 
-Once installed, Claude Code will have access to these tools:
+Once installed, Claude Code will have access to these tools for task management and orchestration:
 
-#### `spawn_task`
-Create an isolated git worktree and spawn a separate Claude CLI instance to work on a specific task in parallel.
+#### Task Management Tools
+
+**`spawn_task`**
+Create an isolated git worktree and spawn a separate AI assistant instance to work on a specific task in parallel.
 
 ```
 Can you spawn a task to add unit tests for the authentication module?
 ```
 
-#### `list_tasks`
+**`list_tasks`**
 List all active and recently completed tasks across all projects.
 
 ```
 Show me all my current tasks
 ```
 
-#### `check_tasks`
+**`check_tasks`**
 Check all active tasks for completion and automatically merge completed ones.
 
 ```
 Check if any of my tasks are completed
 ```
 
-#### `close_task`
-Mark a task as completed without deleting the worktree or branch. Useful when you've manually implemented a task.
-
-```
-Close the fix-auth task
-```
-
-#### `merge_task`
+**`merge_task`**
 Manually merge a specific task back to its base branch.
 
 ```
 Merge the fix-auth task
 ```
 
-#### `kill_task`
-Kill and remove a specific task.
+**`close_task`**
+Mark a task as completed and terminate its tmux session. Worktree and branch are preserved.
+
+```
+Close the fix-auth task
+```
+
+**`kill_task`**
+Kill and remove a specific task, terminating its tmux session and deleting worktree/branch.
 
 ```
 Kill the test-feature task
+```
+
+#### Orchestration & Monitoring Tools
+
+**`send_command`**
+Send a command or message to a task's tmux session. Use this to communicate with spawned tasks, provide guidance, or intervene when needed.
+
+```
+Send a command to fix-auth: "Please focus on the token refresh logic only"
+```
+
+**`read_session_output`**
+Read the terminal output from a task's tmux session. Monitor what the AI is doing, check for errors, or verify progress.
+
+```
+Read the output from fix-auth task
+```
+
+**`list_sessions`**
+List all active tmux sessions for running tasks, showing which are running or terminated.
+
+```
+List all active sessions
+```
+
+#### Orchestration Best Practices
+
+When spawning tasks, Claude can:
+- **Monitor progress**: Use `read_session_output` to check what the task is doing
+- **Intervene if needed**: Use `send_command` to provide guidance or corrections
+- **Detect deviations**: Watch for tasks going off-track and redirect them
+- **Coordinate tasks**: Send commands to multiple tasks for complex workflows
+
+Example orchestration workflow:
+```
+Me: Please refactor the auth module and add tests
+
+Claude:
+1. Spawns "refactor-auth" task
+2. Spawns "add-auth-tests" task
+3. Monitors both sessions periodically with read_session_output
+4. Notices refactor-auth is modifying unrelated files
+5. Sends command: "Please focus only on auth module refactoring"
+6. Waits for both to complete
+7. Checks and merges both tasks
 ```
 
 ## Configuration

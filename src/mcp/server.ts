@@ -108,6 +108,50 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['taskNameOrId'],
         },
       },
+      {
+        name: 'send_command',
+        description: 'Send a command to a task\'s tmux session. Use this to communicate with or orchestrate tasks. For example: check status, run tests, provide feedback, or intervene when a task deviates from expectations.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskNameOrId: {
+              type: 'string',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
+            },
+            command: {
+              type: 'string',
+              description: 'Command or message to send to the task. This will be typed into the AI assistant\'s terminal.',
+            },
+          },
+          required: ['taskNameOrId', 'command'],
+        },
+      },
+      {
+        name: 'read_session_output',
+        description: 'Read the terminal output from a task\'s tmux session. Use this to monitor progress, check for errors, or see what the AI is currently doing. You should actively monitor tasks and intervene if you see deviations from the task description.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskNameOrId: {
+              type: 'string',
+              description: 'Task ID (preferred, e.g. "4681ae30") or task name. Use list_tasks to see task IDs.',
+            },
+            lines: {
+              type: 'number',
+              description: 'Number of lines to read from the end of the output (default: 100)',
+            },
+          },
+          required: ['taskNameOrId'],
+        },
+      },
+      {
+        name: 'list_sessions',
+        description: 'List all active tmux sessions for running tasks, showing which sessions are running or terminated.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
     ],
   };
 });
@@ -280,6 +324,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         console.log = originalLog;
         console.error = originalError;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case 'send_command': {
+        const { taskNameOrId, command } = args as { taskNameOrId: string; command: string };
+
+        const originalLog = console.log;
+        const originalError = console.error;
+        let output = '';
+
+        console.log = (...logArgs: any[]) => {
+          output += logArgs.join(' ') + '\n';
+        };
+        console.error = (...errorArgs: any[]) => {
+          output += 'ERROR: ' + errorArgs.join(' ') + '\n';
+        };
+
+        orchestrator.sendCommandToTask(taskNameOrId, command);
+
+        console.log = originalLog;
+        console.error = originalError;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output || `Command sent to task ${taskNameOrId}: ${command}`,
+            },
+          ],
+        };
+      }
+
+      case 'read_session_output': {
+        const { taskNameOrId, lines } = args as { taskNameOrId: string; lines?: number };
+
+        const output = orchestrator.readSessionOutput(taskNameOrId, lines || 100);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output || '(No output)',
+            },
+          ],
+        };
+      }
+
+      case 'list_sessions': {
+        const sessions = orchestrator.listActiveSessions();
+
+        let output = '📺 Active Task Sessions:\n\n';
+
+        if (sessions.length === 0) {
+          output += 'No active task sessions found.\n';
+        } else {
+          sessions.forEach(session => {
+            const statusIcon = session.status === 'running' ? '🟢' : '🔴';
+            output += `${statusIcon} ${session.taskName} [${session.taskId}]\n`;
+            output += `   Session: ${session.session}\n`;
+            output += `   Status: ${session.status}\n\n`;
+          });
+        }
 
         return {
           content: [
