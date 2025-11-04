@@ -49,7 +49,8 @@ export class GlobalClaudeOrchestrator {
         testCommands: ['yarn test', 'yarn build'],
         terminalApp: 'iterm',
         claudeCommand: 'claude',
-        provider: 'claude'
+        provider: 'claude',
+        codexCommand: 'codex'
       };
       fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
     }

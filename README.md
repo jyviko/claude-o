@@ -1,10 +1,10 @@
 # AI Task Orchestrator (formerly Claude Orchestrator)
 
-A global task orchestration system that uses git worktrees to run multiple parallel AI coding assistant sessions on independent tasks. Supports both Claude Code and OpenAI GPT models.
+A global task orchestration system that uses git worktrees to run multiple parallel AI coding assistant sessions on independent tasks. Supports both Claude Code and OpenAI Codex CLI.
 
 ## Features
 
-- **Multiple AI Providers**: Choose between Claude Code or OpenAI (GPT-4, GPT-3.5, etc.)
+- **Multiple AI Providers**: Choose between Claude Code or OpenAI Codex CLI
 - **Parallel Task Execution**: Spawn multiple AI assistant instances working on different tasks simultaneously
 - **Git Worktree Integration**: Each task gets its own isolated git worktree
 - **Tmux Session Management**: Each task runs in a named tmux session for easy coordination
@@ -148,9 +148,7 @@ Edit `~/.claude-o/config/global-settings.json`:
   "terminalApp": "default",
   "claudeCommand": "claude",
   "provider": "claude",
-  "openaiApiKey": "",
-  "openaiModel": "gpt-4",
-  "openaiBaseUrl": "https://api.openai.com"
+  "codexCommand": "codex"
 }
 ```
 
@@ -165,29 +163,49 @@ The `provider` setting determines which AI assistant to use for tasks. Available
 - Configuration:
   - `claudeCommand`: Command to launch Claude (default: `"claude"`)
 
-**OpenAI** (`"provider": "openai"`)
-- Uses OpenAI's Chat Completions API (GPT-4, GPT-3.5, etc.)
-- Requires OpenAI API key
+**OpenAI Codex** (`"provider": "codex"`)
+- Uses OpenAI Codex CLI - an open-source coding agent that runs in your terminal
+- Built in Rust for speed and efficiency
+- Similar interface to Claude Code
 - Configuration:
-  - `openaiApiKey`: Your OpenAI API key (get from https://platform.openai.com/api-keys)
-  - `openaiModel`: Model to use (default: `"gpt-4"`, options: `"gpt-4"`, `"gpt-3.5-turbo"`, `"gpt-4-turbo"`, etc.)
-  - `openaiBaseUrl`: API base URL (default: `"https://api.openai.com"`, can be changed for Azure OpenAI or other compatible APIs)
+  - `codexCommand`: Command to launch Codex (default: `"codex"`)
 
-##### Setting up OpenAI
+##### Setting up OpenAI Codex
 
-1. Get your API key from https://platform.openai.com/api-keys
-2. Edit `~/.claude-o/config/global-settings.json`:
+1. Install Codex CLI:
+   ```bash
+   # Using npm
+   npm i -g @openai/codex
+
+   # Or using Homebrew (macOS)
+   brew install --cask codex
+   ```
+
+2. Authenticate Codex (first time only):
+   ```bash
+   codex
+   # You'll be prompted to sign in with your ChatGPT account
+   # Codex works with ChatGPT Plus, Pro, Business, Edu, or Enterprise plans
+   # You can also use an API key for authentication
+   ```
+
+3. Edit `~/.claude-o/config/global-settings.json`:
    ```json
    {
-     "provider": "openai",
-     "openaiApiKey": "sk-your-api-key-here",
-     "openaiModel": "gpt-4"
+     "provider": "codex",
+     "codexCommand": "codex"
    }
    ```
-3. Spawn a task as usual: `co spawn fix-bug "Fix authentication bug"`
-4. An interactive chat interface with OpenAI will open in your terminal
 
-**Note**: OpenAI provider uses API calls which incur costs. Check OpenAI's pricing at https://openai.com/pricing
+4. Spawn a task as usual: `co spawn fix-bug "Fix authentication bug"`
+5. Codex will launch in your terminal with full context of the task
+
+**Platform Support:**
+- **macOS**: Fully supported
+- **Linux**: Fully supported
+- **Windows**: Experimental (use WSL recommended)
+
+**Note**: Codex requires a ChatGPT subscription or OpenAI API key. Learn more at https://github.com/openai/codex
 
 #### Terminal App Options
 

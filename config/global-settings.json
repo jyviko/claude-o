@@ -11,7 +11,5 @@
   "terminalApp": "default",
   "claudeCommand": "claude",
   "provider": "claude",
-  "openaiApiKey": "",
-  "openaiModel": "gpt-4",
-  "openaiBaseUrl": "https://api.openai.com"
+  "codexCommand": "codex"
 }

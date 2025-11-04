@@ -32,7 +32,7 @@ export interface ClaudeToolCall {
   };
 }
 
-export type AIProvider = 'claude' | 'openai';
+export type AIProvider = 'claude' | 'codex';
 
 export interface GlobalSettings {
   defaultBaseBranch: string;
@@ -43,7 +43,5 @@ export interface GlobalSettings {
   terminalApp: 'default' | 'iterm' | 'wezterm' | 'alacritty';
   claudeCommand: string;
   provider: AIProvider;
-  openaiApiKey?: string;
-  openaiModel?: string;
-  openaiBaseUrl?: string;
+  codexCommand?: string;
 }
