@@ -35,7 +35,9 @@ export class ClaudeProvider implements AIProviderInterface {
 
     if (process.platform === 'darwin') {
       // macOS - use tmux for session management
-      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} "${settings.claudeCommand} ${JSON.stringify(prompt)}"`;
+      // Disable MCP servers for spawned tasks to avoid tool name conflicts
+      // Use single quotes for tmux command to avoid quote escaping issues
+      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} '${settings.claudeCommand} --strict-mcp-config ${JSON.stringify(prompt)}'`;
 
       console.log(`🚀 Launching Claude in tmux session: ${tmuxSessionName}`);
       console.log(`   Control with: tmux attach -t ${tmuxSessionName}`);
@@ -46,7 +48,7 @@ export class ClaudeProvider implements AIProviderInterface {
         `tell application "Terminal" to do script ${JSON.stringify(tmuxCommand)}`;
 
       try {
-        execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`);
+        execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`, { stdio: 'pipe' });
         console.log(`✅ Terminal opened successfully`);
         return tmuxSessionName;
       } catch (error) {
@@ -97,7 +99,8 @@ export class CodexProvider implements AIProviderInterface {
 
     if (process.platform === 'darwin') {
       // macOS - use tmux for session management
-      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} "${codexCommand} ${JSON.stringify(prompt)}"`;
+      // Use single quotes for tmux command to avoid quote escaping issues
+      const tmuxCommand = `cd ${JSON.stringify(task.worktreePath)} && tmux new-session -s ${JSON.stringify(tmuxSessionName)} -n ${JSON.stringify(task.taskName)} '${codexCommand} ${JSON.stringify(prompt)}'`;
 
       console.log(`🚀 Launching Codex in tmux session: ${tmuxSessionName}`);
       console.log(`   Control with: tmux attach -t ${tmuxSessionName}`);
@@ -108,7 +111,7 @@ export class CodexProvider implements AIProviderInterface {
         `tell application "Terminal" to do script ${JSON.stringify(tmuxCommand)}`;
 
       try {
-        execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`);
+        execSync(`osascript -e ${JSON.stringify(appleScriptCommand)}`, { stdio: 'pipe' });
         console.log(`✅ Terminal opened successfully`);
         return tmuxSessionName;
       } catch (error) {

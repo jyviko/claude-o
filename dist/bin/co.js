@@ -17,7 +17,7 @@ async function main() {
             break;
         case 'list':
         case 'l':
-            orchestrator.listAllTasks();
+            handleList(args);
             break;
         case 'close':
             handleClose(args);
@@ -34,6 +34,7 @@ async function main() {
             handleNuke(args);
             break;
         case 'send':
+        case 'x':
             handleSend(args);
             break;
         case 'tool':
@@ -51,6 +52,10 @@ function handleSpawn(args) {
         process.exit(1);
     }
     orchestrator.spawnTask(taskName, description);
+}
+function handleList(args) {
+    const scope = args[0] || 'current';
+    orchestrator.listAllTasks(scope);
 }
 function handleClose(args) {
     const [taskName] = args;
@@ -125,41 +130,54 @@ async function handleTool(args) {
 }
 function showHelp() {
     console.log(`
-Claude Orchestrator v1.0.0
+AI Task Orchestrator v1.0.0
 
 Usage:
-  co spawn <name> <description>      - Spawn new task
-  co check                           - Check & merge completed tasks
-  co list                            - List all tasks globally
-  co close <task-id|task-name>       - Mark task complete (keeps worktree)
-  co merge <task-id|task-name>       - Manually merge a task
-  co kill <task-id|task-name>        - Kill/delete a task
-  co send <task-id> <command>        - Send command to task's tmux session
-  co nuke --confirm                  - ERASE ALL TASKS (requires --confirm)
+  co spawn <name> <description>      Spawn new task
+  co check                           Check & merge completed tasks
+  co list [all|<project-name>]       List tasks (default: current repo only)
+  co close <task-id|task-name>       Mark task complete (keeps worktree)
+  co merge <task-id|task-name>       Manually merge a task
+  co kill <task-id|task-name>        Kill/delete a task permanently
+  co send <task-id> <command>        Send command to task's tmux session
+  co nuke --confirm                  ERASE ALL TASKS (requires --confirm)
 
 Shortcuts:
-  co s = spawn
-  co c = check
-  co l = list
-  co m = merge
-  co k = kill
+  s, spawn      Spawn new task
+  c, check      Check & merge tasks
+  l, list       List tasks
+  m, merge      Merge task
+  k, kill       Kill task
+  x, send       Send command to task
+
+List Command:
+  co list              List tasks for current repo only
+  co list all          List tasks for all repos
+  co list <project>    List tasks for specific project
 
 Examples:
   co spawn fix-auth "Fix authentication refresh token"
-  co spawn update-ui "Update dashboard layout" main
-  co check
-  co list
-  co close 4681ae30        (mark complete, manually implemented)
-  co merge 4681ae30        (preferred: use task ID from list)
-  co merge fix-auth        (also works with task name)
-  co send 4681ae30 "npm test"  (send command to task's terminal)
-  co kill 4681ae30
-  co nuke --confirm
+  co list                  # Current repo tasks only
+  co list all              # All tasks from all projects
+  co list my-project       # Tasks from specific project
+  co send 4681ae30 "npm test"         # Send command + Enter to task
+  co x 4681ae30 "run tests"           # Shortcut for send
+  co close 4681ae30        # Mark complete, keeps worktree/branch
+  co merge 4681ae30        # Merge to base branch
+  co kill 4681ae30         # Delete everything permanently
 
-Note: Use 'co list' to see task IDs. Prefer IDs over names to avoid ambiguity.
-      Merge only merges - it does NOT run tests or builds. Handle that yourself.
-      Close marks a task as complete without deleting - useful for manual work.
-      Send allows coordinating commands across parallel tasks via tmux.
+Send Command:
+  Sends command text followed by Enter key to task's tmux session.
+  Useful for: coordinating tasks, sending new instructions, running tests.
+  Example: co send 4681ae30 "Also add error handling for edge cases"
+
+Command Comparison:
+  close    Stops task, keeps worktree/branch for later merge
+  merge    Merges branch to base (no tests/builds run)
+  kill     Deletes worktree, branch, and all records permanently
+
+Note: Use task IDs from 'co list' to avoid ambiguity.
+      Tasks can be merged later with 'co merge <task-id>'.
 `);
 }
 main().catch(console.error);

@@ -56,30 +56,93 @@ rm -rf /tmp/claude-o
 ```bash
 # Spawn a new task (creates detached tmux session)
 co spawn fix-auth "Fix authentication token refresh bug"
+co s fix-auth "Fix authentication token refresh bug"  # shortcut
 
-# Attach to the task's tmux session to work on it
-tmux attach -t fix-fix-auth-<timestamp>
-
-# List all tasks
-co list
+# List tasks (tabular format)
+co list              # Current repo only (default)
+co list all          # All tasks from all repos
+co list my-project   # Tasks from specific project
+co l                 # Shortcut for current repo
 
 # Check and merge completed tasks
 co check
+co c  # shortcut
 
 # Mark a task as complete without deleting worktree
-co close fix-auth
+co close fix-auth    # Keeps worktree & branch for later merge
 
 # Manually merge a specific task
 co merge fix-auth
+co m fix-auth  # shortcut
 
-# Send command to a task's tmux session (from main terminal)
+# Send command to a task's tmux session (sends text + Enter)
 co send fix-auth "npm test"
+co x fix-auth "Also add error handling"  # shortcut
 
-# Kill/delete a task
-co kill fix-auth
+# Kill/delete a task permanently
+co kill fix-auth     # Deletes worktree, branch, and records
+co k fix-auth        # shortcut
 
 # Erase ALL tasks for current project (dangerous!)
 co nuke --confirm
+```
+
+#### Send Command (Task Coordination)
+
+The `send` command allows you to send text input to a task's tmux session:
+
+```bash
+co send <task-id> "<command>"
+co x <task-id> "<command>"      # shortcut
+```
+
+**How it works:**
+1. Sends the command text to the task's tmux session
+2. Automatically sends Enter key to execute it
+
+**Use cases:**
+- Send new instructions to a running AI task
+- Run tests in a task's terminal
+- Coordinate multiple tasks
+- Provide feedback or corrections
+
+**Examples:**
+```bash
+# Send additional instructions to a task
+co send 4681ae30 "Also add error handling for edge cases"
+
+# Run tests in a task's worktree
+co send a1b2c3d4 "npm test"
+
+# Send follow-up requirements
+co x 6afee43a "Make sure to update the documentation"
+```
+
+#### Command Comparison
+
+| Command | Stops Task | Keeps Worktree | Keeps Branch | Can Merge Later | Use Case |
+|---------|------------|----------------|--------------|-----------------|----------|
+| `close` | Yes | Yes | Yes | Yes | Task done manually, merge later |
+| `kill` | Yes | No | No | No | Abandon task completely |
+| `merge` | N/A | N/A | Merged | N/A | Merge completed task to base |
+| `send` | No | N/A | N/A | N/A | Send commands/instructions to running task |
+
+#### List Output Format
+
+The `co list` command displays tasks in a clean tabular format:
+
+```
+Tasks for my-project
+================================================================================
+
+┌──────────┬─────────────────────────┬──────────┬────────────┬─────────────┐
+│ ID       │ Task                    │ Status   │ Age        │ Description │
+├──────────┼─────────────────────────┼──────────┼────────────┼─────────────┤
+│ 4681ae30 │ fix-auth                │ active   │ 2h ago     │ Fix auth…   │
+│ a1b2c3d4 │ update-ui               │ done     │ 1d ago     │ Update UI   │
+└──────────┴─────────────────────────┴──────────┴────────────┴─────────────┘
+
+Summary: 1 active, 1 completed
 ```
 
 **Tmux Workflow:**

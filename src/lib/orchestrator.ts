@@ -1365,103 +1365,129 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
     `).all(project.path) as GlobalTask[];
   }
   
-  listAllTasks(): void {
-    const projects = this.db.prepare(`
-      SELECT
-        path,
-        name,
-        last_used as lastUsed,
-        default_branch as defaultBranch,
-        task_count as taskCount
-      FROM projects
-      ORDER BY last_used DESC
-    `).all() as Project[];
-    
-    console.log('\n📊 GLOBAL TASK OVERVIEW\n');
-    console.log('=' .repeat(60));
-    
-    projects.forEach(project => {
-      const activeTasks = this.db.prepare(`
-        SELECT
-          id,
-          project_path as projectPath,
-          project_name as projectName,
-          task_name as taskName,
-          description,
-          worktree_path as worktreePath,
-          branch,
-          base_branch as baseBranch,
-          status,
-          created_at as createdAt,
-          completed_at as completedAt,
-          merged_at as mergedAt,
-          metadata
-        FROM tasks
-        WHERE project_path = ? AND status = 'active'
-      `).all(project.path) as GlobalTask[];
+  listAllTasks(scope: 'current' | 'all' | string = 'current'): void {
+    let projectFilter: string | undefined;
 
-      const completedTasks = this.db.prepare(`
-        SELECT
-          id,
-          project_path as projectPath,
-          project_name as projectName,
-          task_name as taskName,
-          description,
-          worktree_path as worktreePath,
-          branch,
-          base_branch as baseBranch,
-          status,
-          created_at as createdAt,
-          completed_at as completedAt,
-          merged_at as mergedAt,
-          metadata
-        FROM tasks
-        WHERE project_path = ? AND status IN ('completed', 'merged')
-        ORDER BY completed_at DESC LIMIT 3
-      `).all(project.path) as GlobalTask[];
-      
-      if (activeTasks.length > 0 || completedTasks.length > 0) {
-        console.log(`\n📁 ${project.name}`);
-        console.log(`   ${project.path}`);
-        console.log(`   Last used: ${new Date(project.lastUsed).toLocaleDateString()}`);
-        
-        if (activeTasks.length > 0) {
-          console.log('\n   🔧 Active Tasks:');
-          activeTasks.forEach(task => {
-            const age = this.getTaskAge(task.createdAt);
-            const shortId = task.id.substring(0, 8);
-            console.log(`      • ${task.taskName} [${shortId}] (${age})`);
-          });
-        }
-
-        if (completedTasks.length > 0) {
-          console.log('\n   ✅ Recently Completed:');
-          completedTasks.forEach(task => {
-            const status = task.status === 'merged' ? '🔀' : '✓';
-            const shortId = task.id.substring(0, 8);
-            console.log(`      ${status} ${task.taskName} [${shortId}]`);
-          });
-        }
+    // Determine which projects to list
+    if (scope === 'current') {
+      try {
+        const currentProject = this.detectProject();
+        projectFilter = currentProject.path;
+      } catch (error) {
+        console.error('❌ Not in a git repository. Use "co list all" to see all tasks.');
+        return;
       }
-    });
-    
-    console.log('\n' + '=' .repeat(60));
-    
-    // Summary stats
-    const stats = this.db.prepare(`
-      SELECT 
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
-        COUNT(CASE WHEN status = 'merged' THEN 1 END) as merged,
-        COUNT(*) as total
+    } else if (scope !== 'all') {
+      // Scope is a project name - find it
+      const project = this.db.prepare(`
+        SELECT path FROM projects WHERE name = ?
+      `).get(scope) as { path: string } | undefined;
+
+      if (!project) {
+        console.error(`❌ Project not found: ${scope}`);
+        console.log('\nAvailable projects:');
+        const projects = this.db.prepare(`SELECT name FROM projects ORDER BY last_used DESC`).all() as { name: string }[];
+        projects.forEach(p => console.log(`   • ${p.name}`));
+        return;
+      }
+      projectFilter = project.path;
+    }
+
+    // Build query based on filter
+    let query = `
+      SELECT
+        id,
+        project_path as projectPath,
+        project_name as projectName,
+        task_name as taskName,
+        description,
+        worktree_path as worktreePath,
+        branch,
+        base_branch as baseBranch,
+        status,
+        created_at as createdAt,
+        completed_at as completedAt,
+        merged_at as mergedAt,
+        metadata
       FROM tasks
-    `).get() as any;
-    
-    console.log('\n📈 Summary:');
-    console.log(`   Total tasks: ${stats.total}`);
-    console.log(`   Active: ${stats.active}`);
-    console.log(`   Completed: ${stats.completed}`);
-    console.log(`   Merged: ${stats.merged}\n`);
+      WHERE status IN ('active', 'completed')
+    `;
+
+    if (projectFilter) {
+      query += ` AND project_path = ?`;
+    }
+
+    query += ` ORDER BY project_name, created_at DESC`;
+
+    const tasks = projectFilter
+      ? this.db.prepare(query).all(projectFilter) as GlobalTask[]
+      : this.db.prepare(query).all() as GlobalTask[];
+
+    if (tasks.length === 0) {
+      const scopeMsg = scope === 'current' ? 'current repository' : scope === 'all' ? 'any project' : `project "${scope}"`;
+      console.log(`\nNo active tasks in ${scopeMsg}\n`);
+      return;
+    }
+
+    // Group by project
+    const tasksByProject = tasks.reduce((acc, task) => {
+      if (!acc[task.projectName]) {
+        acc[task.projectName] = [];
+      }
+      acc[task.projectName].push(task);
+      return acc;
+    }, {} as Record<string, GlobalTask[]>);
+
+    const title = scope === 'current'
+      ? `Tasks for ${Object.keys(tasksByProject)[0]}`
+      : scope === 'all'
+        ? 'All Tasks'
+        : `Tasks for ${scope}`;
+
+    console.log(`\n${title}`);
+    console.log('='.repeat(80) + '\n');
+
+    // Print tabular format
+    Object.entries(tasksByProject).forEach(([projectName, projectTasks]) => {
+      if (scope === 'all') {
+        console.log(`\nProject: ${projectName}`);
+      }
+
+      // Table header
+      console.log('┌──────────┬─────────────────────────┬──────────┬────────────┬─────────────┐');
+      console.log('│ ID       │ Task                    │ Status   │ Age        │ Description │');
+      console.log('├──────────┼─────────────────────────┼──────────┼────────────┼─────────────┤');
+
+      projectTasks.forEach(task => {
+        const shortId = task.id.substring(0, 8);
+        const taskName = this.truncate(task.taskName, 23);
+        const status = task.status === 'active' ? 'active  ' : 'done    ';
+        const age = this.getTaskAge(task.createdAt);
+        const desc = this.truncate(task.description || '', 11);
+
+        console.log(`│ ${shortId} │ ${this.pad(taskName, 23)} │ ${status} │ ${this.pad(age, 10)} │ ${this.pad(desc, 11)} │`);
+      });
+
+      console.log('└──────────┴─────────────────────────┴──────────┴────────────┴─────────────┘');
+    });
+
+    // Summary stats
+    const activeCount = tasks.filter(t => t.status === 'active').length;
+    const completedCount = tasks.filter(t => t.status === 'completed').length;
+
+    console.log(`\nSummary: ${activeCount} active, ${completedCount} completed\n`);
+  }
+
+  private truncate(str: string, len: number): string {
+    if (str.length <= len) return str;
+    return str.substring(0, len - 1) + '…';
+  }
+
+  private pad(str: string, len: number): string {
+    // Remove ANSI color codes for length calculation
+    const cleanStr = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    const padding = ' '.repeat(Math.max(0, len - cleanStr.length));
+    return str + padding;
   }
   
   private getTaskAge(createdAt: string): string {
