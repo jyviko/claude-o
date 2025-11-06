@@ -68,6 +68,11 @@ co l                 # Shortcut for current repo
 co check
 co c  # shortcut
 
+# Clean completed/merged task worktrees and prune git
+co clean             # Current repo only
+co clean all         # All repos
+co clean my-project  # Specific project
+
 # Mark a task as complete without deleting worktree
 co close fix-auth    # Keeps worktree & branch for later merge
 

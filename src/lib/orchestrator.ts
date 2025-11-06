@@ -260,7 +260,10 @@ export class GlobalClaudeOrchestrator {
     
     // Create context files
     this.createTaskContext(task);
-    
+
+    // Add local config files to worktree's .git/info/exclude to prevent tracking
+    this.excludeLocalFiles(task);
+
     // Launch Claude
     this.launchClaude(task);
     
@@ -270,6 +273,24 @@ export class GlobalClaudeOrchestrator {
     return task;
   }
   
+  private excludeLocalFiles(task: GlobalTask) {
+    // Add local config files to .git/info/exclude to prevent them from being tracked
+    const excludeFilePath = path.join(task.worktreePath, '.git', 'info', 'exclude');
+    const filesToExclude = [
+      '# Claude Orchestrator - local config files',
+      'settings.local.json',
+      '.claude/settings.local.json',
+      '.vscode/settings.json',
+      ''
+    ];
+
+    try {
+      fs.appendFileSync(excludeFilePath, '\n' + filesToExclude.join('\n'));
+    } catch (error) {
+      // If we can't add to exclude, it's not critical
+    }
+  }
+
   private createTaskContext(task: GlobalTask) {
     const contextData = {
       task,
@@ -294,11 +315,16 @@ ${task.description}
 1. Work ONLY on this specific task
 2. Do not refactor unrelated code
 3. Stay in this worktree directory
-4. **You are being orchestrated**: The main AI assistant may send you commands via tmux to check progress or provide guidance
-5. When you receive new requests via tmux, APPEND them to the TASK.md file in .claude-o
+4. **Keep your branch up-to-date**: Frequently rebase onto ${task.baseBranch} to get latest changes
+   - Run \`git fetch origin ${task.baseBranch}:${task.baseBranch}\` to update base branch reference
+   - Run \`git rebase ${task.baseBranch}\` to incorporate latest work from the main branch
+   - Do this periodically (every 30-60 minutes of work) or when you suspect changes may have landed
+   - This prevents merge conflicts and keeps your work current
+5. **You are being orchestrated**: The main AI assistant may send you commands via tmux to check progress or provide guidance
+6. When you receive new requests via tmux, APPEND them to the TASK.md file in .claude-o
    - Use \`echo "\\n## Update: $(date)" >> .claude-o/*_${task.taskName}-*.task.md\`
    - Then append the new request details
-6. Create .task_complete when done
+7. Create .task_complete when done
 
 ## Orchestration Notice
 **Your terminal session is monitored by the orchestrating AI assistant.**
@@ -323,20 +349,24 @@ The merge tool does NOT run tests - you are responsible for quality.
 
 ## Completion Checklist
 When done:
-1. **DETECT PROJECT TYPE** - Look for package.json, Cargo.toml, go.mod, etc.
-2. **RUN APPROPRIATE TESTS/BUILDS** - Based on what you found:
+1. **FINAL REBASE** - Ensure you have the latest changes before completing:
+   - Run \`git fetch origin ${task.baseBranch}:${task.baseBranch}\`
+   - Run \`git rebase ${task.baseBranch}\`
+   - This ensures a clean integration when merging back
+2. **DETECT PROJECT TYPE** - Look for package.json, Cargo.toml, go.mod, etc.
+3. **RUN APPROPRIATE TESTS/BUILDS** - Based on what you found:
    - Node.js: npm/yarn/pnpm test && build
    - Go: go test ./... && go build
    - Rust: cargo test && cargo build
    - Python: pytest or unittest
    - C/C++: make test && make
    - If unsure, ask the user what to run
-3. **COMMIT ALL YOUR WORK** - Run git add -A && git commit with descriptive message
-4. Create .claude-o/<timestamp>_${task.taskName}-${task.id.substring(0, 8)}.task_complete with summary
-5. **COMMIT TASK FILES** - Run git add .claude-o && git commit -m "docs: task complete"
+4. **COMMIT ALL YOUR WORK** - Run git add -A && git commit with descriptive message
+5. Create .claude-o/<timestamp>_${task.taskName}-${task.id.substring(0, 8)}.task_complete with summary
+6. **COMMIT TASK FILES** - Run git add .claude-o && git commit -m "docs: task complete"
    This archives the task for history - all files in .claude-o will be merged and kept
-6. Ask user if they want to merge the task back to ${task.baseBranch}
-7. If yes, use mcp__claude-o__merge_task tool (only merges - no tests)
+7. Ask user if they want to merge the task back to ${task.baseBranch}
+8. If yes, use mcp__claude-o__merge_task tool (only merges - no tests)
 
 IMPORTANT:
 - **YOU MUST DETECT and run the right tests!** Don't use hardcoded commands.
@@ -715,19 +745,34 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         return false;
       }
 
-      // Revert files that should not be merged (settings.local.json, TASK.md in root)
-      console.log('\n🔄 Reverting files that should not be merged...');
+      // Preserve local config files by backing them up before merge
+      console.log('\n💾 Backing up local config files that should not be merged...');
 
-      // Revert settings.local.json if it exists
-      const settingsLocalPath = path.join(task.worktreePath, 'settings.local.json');
-      if (fs.existsSync(settingsLocalPath)) {
-        try {
-          execSync(`git -C "${task.worktreePath}" checkout ${task.baseBranch} -- settings.local.json`, { stdio: 'pipe' });
-          console.log('   ✅ Reverted settings.local.json to base branch version');
-        } catch (error) {
-          // File might not exist in base branch, that's okay
+      // List of files to preserve (local config files)
+      const filesToPreserve = [
+        'settings.local.json',
+        '.claude/settings.local.json',
+        '.vscode/settings.json'
+      ];
+
+      const backups: Array<{ file: string; content: string | null }> = [];
+
+      filesToPreserve.forEach(file => {
+        const filePath = path.join(task.worktreePath, file);
+        if (fs.existsSync(filePath)) {
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            backups.push({ file, content });
+            console.log(`   ✅ Backed up ${file}`);
+          } catch (error) {
+            // Can't read file, skip it
+            backups.push({ file, content: null });
+          }
+        } else {
+          // File doesn't exist in worktree - check if it exists in base branch to delete it
+          backups.push({ file, content: null });
         }
-      }
+      });
 
       // Remove TASK.md from root if it exists (should only be in .claude-o)
       const taskMdRootPath = path.join(task.worktreePath, 'TASK.md');
@@ -755,16 +800,69 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         }
       }
 
-      // Merge back to base branch (simple - no tests, no builds)
-      const currentBranch = execSync('git branch --show-current', {
-        encoding: 'utf-8',
-        cwd: task.projectPath
-      }).trim();
+      // Rebase and merge back to base branch using rebase strategy
+      console.log(`\n🔀 Rebasing ${task.branch} onto ${task.baseBranch}...`);
 
-      console.log(`\n🔀 Merging ${task.branch} into ${task.baseBranch}...`);
+      // First, fetch latest changes and update base branch reference in worktree
+      try {
+        console.log('   Fetching latest changes...');
+        // Fetch into FETCH_HEAD instead of directly into the branch (which might be checked out)
+        execSync(`git -C "${task.worktreePath}" fetch origin ${task.baseBranch}`, {
+          stdio: 'pipe'
+        });
+        // Now update the local base branch reference using git update-ref (works even if checked out elsewhere)
+        execSync(`git -C "${task.worktreePath}" update-ref refs/heads/${task.baseBranch} FETCH_HEAD`, {
+          stdio: 'pipe'
+        });
+        console.log(`   ✅ Updated ${task.baseBranch} from remote`);
+      } catch (error: any) {
+        // If fetch fails, it might be because there's no remote or base branch doesn't exist remotely
+        // That's okay, we'll continue with local base branch
+        const errorMsg = error.stderr?.toString() || error.message || '';
+        if (errorMsg.includes('refusing to fetch')) {
+          console.log(`   ℹ️  Base branch is checked out, using alternative update method`);
+          // Try alternative: fetch to a temp ref, then update
+          try {
+            execSync(`git -C "${task.worktreePath}" fetch origin ${task.baseBranch}:refs/remotes/origin/${task.baseBranch}`, {
+              stdio: 'pipe'
+            });
+            execSync(`git -C "${task.worktreePath}" update-ref refs/heads/${task.baseBranch} refs/remotes/origin/${task.baseBranch}`, {
+              stdio: 'pipe'
+            });
+            console.log(`   ✅ Updated ${task.baseBranch} using remote tracking branch`);
+          } catch (altError) {
+            console.log(`   ⚠️  Using local base branch (fetch failed)`);
+          }
+        } else {
+          console.log(`   ⚠️  Using local base branch (no remote or network issue)`);
+        }
+      }
 
-      // Check if base branch is already checked out somewhere
+      // Now rebase the feature branch onto the base branch (while in worktree)
+      console.log(`   Rebasing ${task.branch} onto ${task.baseBranch}...`);
+      try {
+        execSync(`git -C "${task.worktreePath}" rebase ${task.baseBranch}`, {
+          stdio: 'inherit'
+        });
+      } catch (rebaseError: any) {
+        console.error(`\n❌ Rebase failed!`);
+        console.error(`   There may be conflicts that need to be resolved.`);
+        console.error(`\n💡 To resolve:`);
+        console.error(`   1. cd ${task.worktreePath}`);
+        console.error(`   2. Resolve conflicts in the files`);
+        console.error(`   3. git add <resolved-files>`);
+        console.error(`   4. git rebase --continue`);
+        console.error(`   5. Try merging again with: co merge ${task.id.substring(0, 8)}`);
+        process.chdir(originalCwd);
+        return false;
+      }
+
+      console.log(`✅ Rebase completed`);
+
+      // Now find where base branch is checked out and fast-forward merge
+      console.log(`\n📍 Finding base branch location...`);
       let baseBranchLocation = task.projectPath; // Default to main repo
+
       try {
         const worktreeList = execSync('git worktree list --porcelain', {
           encoding: 'utf-8',
@@ -790,43 +888,71 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         // If we can't get worktree list, use default location
       }
 
-      console.log(`   Base branch location: ${baseBranchLocation}`);
+      console.log(`   Base branch ${task.baseBranch} is at: ${baseBranchLocation}`);
 
-      // If base branch is in a different location, we need to merge there
-      if (baseBranchLocation !== task.projectPath) {
-        console.log(`   Base branch ${task.baseBranch} is checked out at: ${baseBranchLocation}`);
-        process.chdir(baseBranchLocation);
+      // Fast-forward the base branch to the rebased feature branch
+      console.log(`\n⏩ Fast-forwarding ${task.baseBranch} to ${task.branch}...`);
+
+      // Check if base branch is currently checked out at that location
+      let isBaseBranchCheckedOut = false;
+      try {
+        const currentBranch = execSync(`git -C "${baseBranchLocation}" branch --show-current`, {
+          encoding: 'utf-8'
+        }).trim();
+        isBaseBranchCheckedOut = (currentBranch === task.baseBranch);
+      } catch (error) {
+        // Can't determine, assume not checked out
       }
 
-      // Check if we're already on the base branch
-      const currentBranchAtLocation = execSync('git branch --show-current', {
-        encoding: 'utf-8'
-      }).trim();
-
-      if (currentBranchAtLocation !== task.baseBranch) {
-        console.log(`   Switching to ${task.baseBranch}...`);
-        try {
-          execSync(`git checkout ${task.baseBranch}`, { stdio: 'inherit' });
-        } catch (checkoutError: any) {
-          // If checkout fails because branch is locked in another worktree, provide helpful error
-          if (checkoutError.message.includes('already used by worktree')) {
-            console.error(`\n❌ Cannot checkout ${task.baseBranch} - it's already checked out elsewhere.`);
-            console.error(`   This shouldn't happen as we detected its location above.`);
-            console.error(`   Try manually merging:`);
-            console.error(`   1. cd ${baseBranchLocation}`);
-            console.error(`   2. git merge --no-ff ${task.branch}`);
-            process.chdir(originalCwd);
-            return false;
-          }
-          throw checkoutError;
+      try {
+        if (isBaseBranchCheckedOut) {
+          // Base branch is checked out - use git reset --hard
+          console.log(`   Base branch is checked out, using reset...`);
+          process.chdir(baseBranchLocation);
+          execSync(`git reset --hard ${task.branch}`, { stdio: 'inherit' });
+        } else {
+          // Base branch is not checked out - use git branch -f (safer, no checkout needed)
+          console.log(`   Base branch not checked out, using branch -f...`);
+          execSync(`git -C "${baseBranchLocation}" branch -f ${task.baseBranch} ${task.branch}`, {
+            stdio: 'inherit'
+          });
         }
-      } else {
-        console.log(`   Already on ${task.baseBranch}`);
+        console.log(`✅ Fast-forwarded ${task.baseBranch} to ${task.branch}`);
+      } catch (error: any) {
+        console.error(`\n❌ Fast-forward failed!`);
+        console.error(`   ${error.message}`);
+        process.chdir(originalCwd);
+        return false;
       }
 
-      execSync(`git merge --no-ff ${task.branch} -m "Merge: ${task.taskName} (automated)"`, { stdio: 'inherit' });
-
-      console.log(`✅ Merged ${task.taskName} into ${task.baseBranch}`);
+      // Restore local config files in the base branch location
+      console.log('\n♻️  Restoring local config files in base branch...');
+      backups.forEach(({ file, content }) => {
+        const filePath = path.join(baseBranchLocation, file);
+        if (content !== null) {
+          try {
+            // Ensure directory exists
+            const fileDir = path.dirname(filePath);
+            if (!fs.existsSync(fileDir)) {
+              fs.mkdirSync(fileDir, { recursive: true });
+            }
+            fs.writeFileSync(filePath, content);
+            console.log(`   ✅ Restored ${file}`);
+          } catch (error) {
+            console.log(`   ⚠️  Could not restore ${file}`);
+          }
+        } else {
+          // File didn't exist - make sure it's removed if it was added during merge
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+              console.log(`   ✅ Removed ${file} (was not in original worktree)`);
+            } catch (error) {
+              // Can't delete, that's okay
+            }
+          }
+        }
+      });
 
       // Clean up worktree
       console.log('\n🗑️  Cleaning up worktree...');
@@ -845,15 +971,7 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
         WHERE id = ?
       `).run(new Date().toISOString(), new Date().toISOString(), task.id);
 
-      // Return to original branch if we changed it
-      if (currentBranch && currentBranch !== task.baseBranch && baseBranchLocation === task.projectPath) {
-        console.log(`\n🔄 Returning to original branch: ${currentBranch}`);
-        try {
-          execSync(`git checkout ${currentBranch}`, { stdio: 'inherit' });
-        } catch (error) {
-          console.warn(`   ⚠️  Could not return to ${currentBranch}, staying on ${task.baseBranch}`);
-        }
-      }
+      console.log(`✅ Successfully integrated ${task.taskName} into ${task.baseBranch} using rebase`);
 
       process.chdir(originalCwd);
       this.logTask('merge', task);
@@ -1336,6 +1454,166 @@ Example: .claude-o/2025-10-22T21-24-51-112_${task.taskName}-${task.id.substring(
 
     console.log(`\n💥 Nuke complete!`);
     console.log(`   Removed: ${removed}`);
+    if (failed > 0) {
+      console.log(`   Failed: ${failed}`);
+    }
+    console.log(``);
+  }
+
+  cleanCompletedTasks(scope: 'current' | 'all' | string = 'current'): void {
+    let projectFilter: string | undefined;
+    let projects: Project[] = [];
+
+    // Determine which projects to clean
+    if (scope === 'current') {
+      try {
+        const currentProject = this.detectProject();
+        projectFilter = currentProject.path;
+        projects = [currentProject];
+      } catch (error) {
+        console.error('❌ Not in a git repository. Use "co clean all" to clean all projects.');
+        return;
+      }
+    } else if (scope === 'all') {
+      // Get all projects
+      const allProjects = this.db.prepare(`
+        SELECT
+          path,
+          name,
+          last_used as lastUsed,
+          default_branch as defaultBranch,
+          task_count as taskCount
+        FROM projects
+        ORDER BY name
+      `).all() as Project[];
+      projects = allProjects;
+    } else {
+      // Scope is a project name - find it
+      const project = this.db.prepare(`
+        SELECT
+          path,
+          name,
+          last_used as lastUsed,
+          default_branch as defaultBranch,
+          task_count as taskCount
+        FROM projects
+        WHERE name = ?
+      `).get(scope) as Project | undefined;
+
+      if (!project) {
+        console.error(`❌ Project not found: ${scope}`);
+        console.log('\nAvailable projects:');
+        const availableProjects = this.db.prepare(`SELECT name FROM projects ORDER BY last_used DESC`).all() as { name: string }[];
+        availableProjects.forEach(p => console.log(`   • ${p.name}`));
+        return;
+      }
+      projects = [project];
+    }
+
+    const title = scope === 'current'
+      ? `🧹 Cleaning completed tasks for ${projects[0].name}...`
+      : scope === 'all'
+        ? '🧹 Cleaning completed tasks for all projects...'
+        : `🧹 Cleaning completed tasks for ${scope}...`;
+
+    console.log(`\n${title}\n`);
+
+    // Build query based on filter
+    let query = `
+      SELECT
+        id,
+        project_path as projectPath,
+        project_name as projectName,
+        task_name as taskName,
+        description,
+        worktree_path as worktreePath,
+        branch,
+        base_branch as baseBranch,
+        status,
+        created_at as createdAt,
+        completed_at as completedAt,
+        merged_at as mergedAt,
+        metadata
+      FROM tasks
+      WHERE status IN ('completed', 'merged')
+    `;
+
+    let completedTasks: GlobalTask[];
+    if (scope === 'all') {
+      completedTasks = this.db.prepare(query).all() as GlobalTask[];
+    } else {
+      query += ` AND project_path = ?`;
+      completedTasks = this.db.prepare(query).all(projects[0].path) as GlobalTask[];
+    }
+
+    if (completedTasks.length === 0) {
+      console.log('✨ No completed tasks to clean\n');
+      return;
+    }
+
+    console.log(`Found ${completedTasks.length} completed task(s) to clean...\n`);
+
+    const originalCwd = process.cwd();
+    let cleaned = 0;
+    let failed = 0;
+
+    completedTasks.forEach(task => {
+      try {
+        console.log(`🧹 Cleaning: ${task.taskName} [${task.id.substring(0, 8)}]`);
+
+        // Remove worktree if it exists
+        if (fs.existsSync(task.worktreePath)) {
+          process.chdir(task.projectPath);
+          try {
+            execSync(`git worktree remove "${task.worktreePath}" --force`, { stdio: 'pipe' });
+            console.log(`   ✅ Worktree removed`);
+          } catch {
+            // Try manual cleanup
+            execSync(`rm -rf "${task.worktreePath}"`, { stdio: 'pipe' });
+            console.log(`   ✅ Worktree removed (manual)`);
+          }
+        } else {
+          console.log(`   ℹ️  Worktree already removed`);
+        }
+
+        // Delete branch if it exists
+        try {
+          process.chdir(task.projectPath);
+          execSync(`git branch -D ${task.branch}`, { stdio: 'pipe' });
+          console.log(`   ✅ Branch deleted`);
+        } catch {
+          console.log(`   ℹ️  Branch already deleted`);
+        }
+
+        // Delete from database
+        this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(task.id);
+
+        cleaned++;
+      } catch (error: any) {
+        console.error(`   ❌ Failed: ${error.message}`);
+        failed++;
+      }
+    });
+
+    // Prune git worktrees for all affected projects
+    console.log(`\n🌳 Pruning git worktrees...`);
+    const uniqueProjects = [...new Set(completedTasks.map(t => t.projectPath))];
+
+    uniqueProjects.forEach(projectPath => {
+      try {
+        process.chdir(projectPath);
+        execSync(`git worktree prune`, { stdio: 'pipe' });
+        const projectName = projects.find(p => p.path === projectPath)?.name || path.basename(projectPath);
+        console.log(`   ✅ ${projectName} pruned`);
+      } catch (error: any) {
+        console.error(`   ❌ Failed to prune ${projectPath}: ${error.message}`);
+      }
+    });
+
+    process.chdir(originalCwd);
+
+    console.log(`\n✨ Clean complete!`);
+    console.log(`   Cleaned: ${cleaned}`);
     if (failed > 0) {
       console.log(`   Failed: ${failed}`);
     }

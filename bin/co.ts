@@ -10,17 +10,21 @@ async function main() {
   switch (command) {
     case 'spawn':
     case 's':
-      handleSpawn(args);
+      await handleSpawn(args);
       break;
       
     case 'check':
     case 'c':
       orchestrator.checkProjectTasks();
       break;
-      
+
     case 'list':
     case 'l':
       handleList(args);
+      break;
+
+    case 'clean':
+      handleClean(args);
       break;
 
     case 'close':
@@ -55,12 +59,22 @@ async function main() {
   }
 }
 
-function handleSpawn(args: string[]) {
+async function handleSpawn(args: string[]) {
   const [taskName, ...descParts] = args;
-  const description = descParts.join(' ');
+  let description = descParts.join(' ');
+
+  // If no description provided via args, try reading from stdin
+  if (!description && !process.stdin.isTTY) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    description = Buffer.concat(chunks).toString('utf-8').trim();
+  }
 
   if (!taskName || !description) {
     console.error('Usage: co spawn <task-name> <description>');
+    console.error('       cat task-file | co spawn <task-name>');
     process.exit(1);
   }
 
@@ -70,6 +84,11 @@ function handleSpawn(args: string[]) {
 function handleList(args: string[]) {
   const scope = args[0] || 'current';
   orchestrator.listAllTasks(scope);
+}
+
+function handleClean(args: string[]) {
+  const scope = args[0] || 'current';
+  orchestrator.cleanCompletedTasks(scope);
 }
 
 function handleClose(args: string[]) {
@@ -168,6 +187,7 @@ Usage:
   co spawn <name> <description>      Spawn new task
   co check                           Check & merge completed tasks
   co list [all|<project-name>]       List tasks (default: current repo only)
+  co clean [all|<project-name>]      Clean completed/merged task worktrees
   co close <task-id|task-name>       Mark task complete (keeps worktree)
   co merge <task-id|task-name>       Manually merge a task
   co kill <task-id|task-name>        Kill/delete a task permanently
@@ -187,11 +207,18 @@ List Command:
   co list all          List tasks for all repos
   co list <project>    List tasks for specific project
 
+Clean Command:
+  co clean             Clean completed tasks for current repo
+  co clean all         Clean completed tasks from all repos
+  co clean <project>   Clean completed tasks for specific project
+
 Examples:
   co spawn fix-auth "Fix authentication refresh token"
   co list                  # Current repo tasks only
   co list all              # All tasks from all projects
   co list my-project       # Tasks from specific project
+  co clean                 # Clean completed tasks (current repo)
+  co clean all             # Clean all completed tasks (all repos)
   co send 4681ae30 "npm test"         # Send command + Enter to task
   co x 4681ae30 "run tests"           # Shortcut for send
   co close 4681ae30        # Mark complete, keeps worktree/branch
